@@ -1,3 +1,7 @@
+#=============================================================================
+# WintakOS - GitHub Actions CI/CD Pipeline (Phase 1)
+#=============================================================================
+
 name: WintakOS Build
 
 on:
@@ -38,13 +42,13 @@ jobs:
       - name: Kernel derle
         run: make all
 
-      #--- YENİ: ELF ve Multiboot2 doğrulama ---
       - name: Kernel dogrulama
         run: make verify
 
       - name: QEMU boot testi
         run: |
-          timeout 3 qemu-system-i386 \
+          echo "QEMU boot testi (5 saniye)..."
+          timeout 5 qemu-system-i386 \
             -cdrom wintakos.iso \
             -m 128M \
             -display none \
