@@ -1,0 +1,17 @@
+# Derleme ciktilari
+*.o
+*.bin
+*.iso
+*.elf
+
+# ISO build dizini
+iso/
+
+# Editor / sistem
+*.swp
+*.swo
+*~
+.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
