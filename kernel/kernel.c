@@ -8,11 +8,11 @@
 
 #include "types.h"
 #include "vga.h"
-#include "gdt.h"
-#include "idt.h"
-#include "isr.h"
-#include "pic.h"
-#include "pit.h"
+#include "../cpu/gdt.h"
+#include "../cpu/idt.h"
+#include "../cpu/isr.h"
+#include "../cpu/pic.h"
+#include "../cpu/pit.h"
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
 
