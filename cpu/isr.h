@@ -1,59 +1,44 @@
-/*============================================================================
- * WintakOS - isr.h
- * Interrupt Service Routines - Başlık
- *
- * CPU interrupt'ı aldığında çağrılan handler sistemi.
- * Assembly stub register'ları kaydettikten sonra C handler'ı çağırır.
- * C handler, kayıtlı fonksiyonu dispatch eder (PIT, klavye, vb.).
- *==========================================================================*/
-
 #ifndef WINTAKOS_ISR_H
 #define WINTAKOS_ISR_H
 
-#include "types.h"
+#include "../include/types.h"
 
-/*==========================================================================
- * Register Yapısı
- *
- * isr_stub.asm'deki common stub tarafından stack üzerine inşa edilir.
- * Stack düzeni (düşük adresten yükseğe = struct başından sonuna):
- *
- *   ds         ← pusha'dan önce push edilen veri segment değeri
- *   edi..eax   ← pusha tarafından kaydedilen genel amaçlı register'lar
- *   int_no     ← ISR stub tarafından push edilen interrupt numarası
- *   err_code   ← CPU tarafından (veya stub'daki dummy 0) push edilen
- *   eip        ← CPU tarafından interrupt anında push edilen
- *   cs, eflags ← CPU tarafından push edilen
- *   useresp,ss ← Sadece privilege değişiminde (ring 3→0) push edilir
- *========================================================================*/
 typedef struct {
-    /* Veri segment seçici (common stub tarafından push edilir) */
-    uint32_t ds;
-
-    /* pusha tarafından kaydedilen register'lar */
+    uint32_t gs, fs, es, ds;
     uint32_t edi, esi, ebp, esp, ebx, edx, ecx, eax;
-
-    /* ISR stub tarafından push edilen */
-    uint32_t int_no;
-    uint32_t err_code;
-
-    /* CPU tarafından otomatik push edilen */
-    uint32_t eip;
-    uint32_t cs;
-    uint32_t eflags;
-    uint32_t useresp;   /* Sadece privilege değişiminde geçerli */
-    uint32_t ss;        /* Sadece privilege değişiminde geçerli */
+    uint32_t int_no, err_code;
+    uint32_t eip, cs, eflags, useresp, ss;
 } __attribute__((packed)) registers_t;
 
-/*--- Interrupt handler fonksiyon tipi ---*/
-typedef void (*isr_handler_t)(registers_t* regs);
+typedef void (*irq_handler_t)(registers_t*);
 
-/*--- Genel Fonksiyonlar ---*/
+void isr_init(void);
+void irq_register_handler(uint8_t irq, irq_handler_t handler);
 
-/* Belirli bir interrupt numarasına handler kaydet */
-void isr_register_handler(uint8_t num, isr_handler_t handler);
+extern void isr0(void);  extern void isr1(void);
+extern void isr2(void);  extern void isr3(void);
+extern void isr4(void);  extern void isr5(void);
+extern void isr6(void);  extern void isr7(void);
+extern void isr8(void);  extern void isr9(void);
+extern void isr10(void); extern void isr11(void);
+extern void isr12(void); extern void isr13(void);
+extern void isr14(void); extern void isr15(void);
+extern void isr16(void); extern void isr17(void);
+extern void isr18(void); extern void isr19(void);
+extern void isr20(void); extern void isr21(void);
+extern void isr22(void); extern void isr23(void);
+extern void isr24(void); extern void isr25(void);
+extern void isr26(void); extern void isr27(void);
+extern void isr28(void); extern void isr29(void);
+extern void isr30(void); extern void isr31(void);
 
-/* Handler kaydını kaldır */
-void isr_unregister_handler(uint8_t num);
+extern void irq0(void);  extern void irq1(void);
+extern void irq2(void);  extern void irq3(void);
+extern void irq4(void);  extern void irq5(void);
+extern void irq6(void);  extern void irq7(void);
+extern void irq8(void);  extern void irq9(void);
+extern void irq10(void); extern void irq11(void);
+extern void irq12(void); extern void irq13(void);
+extern void irq14(void); extern void irq15(void);
 
-#endif /* WINTAKOS_ISR_H */
+#endif
