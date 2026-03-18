@@ -22,7 +22,7 @@ ASFLAGS := -f elf32
 CFLAGS  := $(CFLAGS_ARCH) -std=gnu99 -ffreestanding -O2 \
            -Wall -Wextra -Werror \
            -fno-stack-protector -fno-pie -fno-pic \
-           -Iinclude -Ikernel -Icpu
+           -I. -Iinclude -Ikernel -Icpu
 
 LINK_FLAGS := $(CFLAGS_ARCH) -T linker.ld -ffreestanding -O2 -nostdlib \
               -no-pie -static \
