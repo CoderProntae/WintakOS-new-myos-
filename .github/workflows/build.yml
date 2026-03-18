@@ -1,7 +1,3 @@
-#=============================================================================
-# WintakOS - GitHub Actions CI/CD Pipeline
-#=============================================================================
-
 name: WintakOS Build
 
 on:
@@ -19,9 +15,6 @@ jobs:
       - name: Kaynak kodunu indir
         uses: actions/checkout@v4
 
-      #--- DÜZELTME BURADA ---
-      # gcc-multilib: 64-bit sistemde 32-bit derleme icin gerekli
-      # Bu paket 32-bit libgcc, libc gibi kutuphaneleri saglar
       - name: Derleme araclarini kur
         run: |
           sudo apt-get update
@@ -37,40 +30,20 @@ jobs:
 
       - name: Arac versiyonlari
         run: |
-          echo "=== GCC ==="
           gcc --version | head -1
-          echo "=== NASM ==="
           nasm --version
-          echo "=== 32-bit libgcc kontrolu ==="
-          ls -la /usr/lib/gcc/x86_64-linux-gnu/*/32/libgcc.a 2>/dev/null && \
-            echo "32-bit libgcc BULUNDU" || \
-            echo "UYARI: 32-bit libgcc bulunamadi"
-          echo "=== GRUB ==="
           grub-mkrescue --version
-          echo "=== QEMU ==="
           qemu-system-i386 --version | head -1
 
       - name: Kernel derle
         run: make all
 
-      - name: Cikti dosyalarini kontrol et
-        run: |
-          echo "=== Kernel Binary ==="
-          file wintakos.bin
-          ls -lh wintakos.bin
-          echo ""
-          echo "=== ISO Dosyasi ==="
-          file wintakos.iso
-          ls -lh wintakos.iso
-          echo ""
-          echo "=== Multiboot2 Basligi Kontrolu ==="
-          grub-file --is-x86-multiboot2 wintakos.bin && \
-            echo "BASARILI: Multiboot2 uyumlu kernel" || \
-            echo "HATA: Multiboot2 basligi bulunamadi!"
+      #--- YENİ: ELF ve Multiboot2 doğrulama ---
+      - name: Kernel dogrulama
+        run: make verify
 
       - name: QEMU boot testi
         run: |
-          echo "QEMU boot testi baslatiliyor (3 saniye)..."
           timeout 3 qemu-system-i386 \
             -cdrom wintakos.iso \
             -m 128M \
