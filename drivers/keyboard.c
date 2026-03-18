@@ -1,35 +1,22 @@
-/*============================================================================
- * WintakOS - keyboard.c
- * PS/2 Klavye Surucusu
- *
- * IRQ1 uzerinden PS/2 klavyeden scancode okur,
- * Turkce Q klavye haritasiyla ASCII'ye cevirir.
- *==========================================================================*/
-
 #include "keyboard.h"
 #include "keymap_tr.h"
+#include "vga_font.h"
 #include "../cpu/ports.h"
 #include "../cpu/isr.h"
 #include "../cpu/pic.h"
 
 #define KBD_DATA_PORT    0x60
 #define KBD_STATUS_PORT  0x64
-
-/* Dairesel karakter tamponu */
 #define KBD_BUFFER_SIZE  256
 
 static char kbd_buffer[KBD_BUFFER_SIZE];
 static volatile uint32_t kbd_read_pos  = 0;
 static volatile uint32_t kbd_write_pos = 0;
 
-/* Son olay */
 static volatile key_event_t last_event;
 static volatile bool        event_ready = false;
-
-/* Modifier durumlari */
 static key_modifiers_t modifiers = {0, 0, 0, 0, 0};
 
-/* Tampona karakter ekle */
 static void kbd_buffer_put(char c)
 {
     uint32_t next = (kbd_write_pos + 1) % KBD_BUFFER_SIZE;
@@ -39,7 +26,17 @@ static void kbd_buffer_put(char c)
     }
 }
 
-/* Scancode'u ozel tus koduna cevir */
+/* Bir karakter harf mi? (CapsLock icin) */
+static bool is_letter(char c)
+{
+    if (c >= 'a' && c <= 'z') return true;
+    if (c == CHAR_TR_DOTLESS_I)    return true;  /* ı */
+    if (c == CHAR_TR_S_CEDILLA)    return true;  /* ş */
+    if (c == CHAR_TR_G_BREVE)      return true;  /* ğ */
+    /* i zaten 'a'-'z' araliginda */
+    return false;
+}
+
 static uint8_t scancode_to_keycode(uint8_t sc)
 {
     switch (sc) {
@@ -70,7 +67,6 @@ static uint8_t scancode_to_keycode(uint8_t sc)
     }
 }
 
-/* IRQ1 handler — her tus basildiginda cagrilir */
 static void keyboard_handler(registers_t* regs)
 {
     (void)regs;
@@ -85,7 +81,6 @@ static void keyboard_handler(registers_t* regs)
     ev.scancode = scancode;
     ev.released = released ? 1 : 0;
 
-    /* Modifier guncelle */
     if (sc == 0x2A || sc == 0x36) {
         modifiers.shift = released ? 0 : 1;
         ev.keycode = (sc == 0x2A) ? KEY_LSHIFT : KEY_RSHIFT;
@@ -107,37 +102,32 @@ static void keyboard_handler(registers_t* regs)
         ev.keycode = KEY_NUMLOCK;
     }
     else if (!released) {
-        /* Normal tus basildi */
         uint8_t kc = scancode_to_keycode(sc);
 
         if (kc != KEY_NONE) {
             ev.keycode = kc;
-
-            /* Enter, backspace, tab icin ASCII ata */
-            if (kc == KEY_ENTER)     ev.ascii = '\n';
+            if (kc == KEY_ENTER)          ev.ascii = '\n';
             else if (kc == KEY_BACKSPACE) ev.ascii = '\b';
-            else if (kc == KEY_TAB)  ev.ascii = '\t';
+            else if (kc == KEY_TAB)       ev.ascii = '\t';
         }
-        else {
-            /* Harf/sayi tusu — haritadan bak */
+        else if (sc < 128) {
             bool use_shift = modifiers.shift;
 
             /* CapsLock: sadece harfleri etkiler */
-            if (modifiers.capslock && sc < 128) {
+            if (modifiers.capslock) {
                 char normal = scancode_to_ascii[sc];
-                if (normal >= 'a' && normal <= 'z') {
+                if (is_letter(normal)) {
                     use_shift = !use_shift;
                 }
             }
 
             if (use_shift) {
-                ev.ascii = (sc < 128) ? scancode_to_ascii_shift[sc] : 0;
+                ev.ascii = scancode_to_ascii_shift[sc];
             } else {
-                ev.ascii = (sc < 128) ? scancode_to_ascii[sc] : 0;
+                ev.ascii = scancode_to_ascii[sc];
             }
         }
 
-        /* Tampona ekle */
         if (ev.ascii) {
             kbd_buffer_put(ev.ascii);
         }
@@ -154,7 +144,6 @@ void keyboard_init(void)
     kbd_write_pos = 0;
     event_ready   = false;
 
-    /* Klavye tamponunu temizle */
     while (inb(KBD_STATUS_PORT) & 0x01) {
         inb(KBD_DATA_PORT);
     }
@@ -165,9 +154,7 @@ void keyboard_init(void)
 
 char keyboard_getchar(void)
 {
-    if (kbd_read_pos == kbd_write_pos) {
-        return 0;
-    }
+    if (kbd_read_pos == kbd_write_pos) return 0;
     char c = kbd_buffer[kbd_read_pos];
     kbd_read_pos = (kbd_read_pos + 1) % KBD_BUFFER_SIZE;
     return c;
