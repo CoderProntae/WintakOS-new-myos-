@@ -1,19 +1,26 @@
 /*============================================================================
  * WintakOS - kernel.c
- * Kernel Ana Giriş Noktası
+ * Kernel Ana Giriş Noktası (Phase 1 Güncellemesi)
  *
- * boot.asm tarafından çağrılır. GRUB'dan gelen Multiboot2 bilgilerini
- * doğrular ve sistem başlatma sürecini yönetir.
- *
- * İleride bu dosya, tüm alt sistemlerin (GDT, IDT, bellek yönetimi,
- * sürücüler, GUI) başlatılma sırasını koordine edecek.
+ * Boot sırası:
+ *   1. VGA başlat
+ *   2. GDT yükle
+ *   3. IDT yükle
+ *   4. PIC başlat (IRQ remap)
+ *   5. PIT başlat (100Hz timer)
+ *   6. Interrupt'ları aç (STI)
+ *   7. Timer doğrulaması
  *==========================================================================*/
 
 #include "types.h"
 #include "vga.h"
+#include "gdt.h"
+#include "idt.h"
+#include "isr.h"
+#include "pic.h"
+#include "pit.h"
 
 /*--- Multiboot2 Sabitleri ---*/
-/* GRUB, kernel'i başarıyla yüklediğinde EAX'e bu değeri koyar */
 #define MULTIBOOT2_BOOTLOADER_MAGIC     0x36D76289
 
 /*--- Kernel Sürüm Bilgileri ---*/
@@ -25,10 +32,6 @@
  * Yardımcı Fonksiyonlar
  *========================================================================*/
 
-/*
- * Başlık banner'ını yazdırır.
- * Renkli ve düzenli bir hoş geldin mesajı gösterir.
- */
 static void print_banner(void)
 {
     vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
@@ -47,17 +50,13 @@ static void print_banner(void)
     vga_put_dec(WINTAKOS_VERSION_MINOR);
     vga_putchar('.');
     vga_put_dec(WINTAKOS_VERSION_PATCH);
-    vga_puts("\n");
+    vga_puts("  (Phase 1 - Interrupt Altyapisi)\n");
 
     vga_set_color(VGA_DARK_GREY, VGA_BLACK);
     vga_puts("  =========================================================\n\n");
 }
 
-/*
- * Sistem durumu satırını yazdırır.
- * [  OK  ] veya [ FAIL ] prefixli renkli durum mesajları.
- */
-static void print_status_ok(const char* message)
+static void print_ok(const char* msg)
 {
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_puts("  [ ");
@@ -65,11 +64,11 @@ static void print_status_ok(const char* message)
     vga_puts(" OK ");
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_puts(" ] ");
-    vga_puts(message);
+    vga_puts(msg);
     vga_putchar('\n');
 }
 
-static void print_status_fail(const char* message)
+static void print_fail(const char* msg)
 {
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_puts("  [ ");
@@ -77,11 +76,11 @@ static void print_status_fail(const char* message)
     vga_puts("FAIL");
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_puts(" ] ");
-    vga_puts(message);
+    vga_puts(msg);
     vga_putchar('\n');
 }
 
-static void print_status_info(const char* label, const char* value)
+static void print_info(const char* label, uint32_t value)
 {
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_puts("  [ ");
@@ -91,74 +90,82 @@ static void print_status_info(const char* label, const char* value)
     vga_puts(" ] ");
     vga_puts(label);
     vga_set_color(VGA_YELLOW, VGA_BLACK);
-    vga_puts(value);
+    vga_put_dec(value);
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_putchar('\n');
 }
 
 /*==========================================================================
  * Kernel Ana Fonksiyonu
- *
- * Parametreler (boot.asm tarafından stack üzerinden aktarılır):
- *   magic   - GRUB Multiboot2 doğrulama değeri (0x36D76289 olmalı)
- *   mbi_ptr - Multiboot2 Information Structure'ın bellek adresi
- *             (şu an kullanılmıyor, Phase 1'de parse edilecek)
  *========================================================================*/
 void kernel_main(uint32_t magic, void* mbi_ptr)
 {
-    /* Kullanılmayan parametreyi işaretle (derleyici uyarısını önle) */
     (void)mbi_ptr;
 
-    /*--- 1. VGA Sürücüsünü Başlat ---*/
+    /*=== 1. VGA Başlat ===*/
     vga_init();
-
-    /*--- 2. Banner Yazdır ---*/
     print_banner();
 
-    /*--- 3. Multiboot2 Doğrulama ---*/
+    /*=== 2. Multiboot2 Doğrulama ===*/
     if (magic == MULTIBOOT2_BOOTLOADER_MAGIC) {
-        print_status_ok("Multiboot2 dogrulama basarili");
+        print_ok("Multiboot2 dogrulama basarili");
     } else {
-        print_status_fail("Multiboot2 dogrulama BASARISIZ!");
-        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
-        vga_puts("\n  HATA: Gecersiz magic deger: ");
+        print_fail("Multiboot2 dogrulama BASARISIZ!");
+        vga_puts("    Beklenen: 0x36D76289, Alinan: ");
         vga_put_hex(magic);
-        vga_puts("\n  Beklenen: ");
-        vga_put_hex(MULTIBOOT2_BOOTLOADER_MAGIC);
-        vga_puts("\n\n  Sistem durduruluyor.\n");
-        return;
+        vga_puts("\n    Sistem durduruluyor.\n");
+        while (1) { __asm__ volatile ("cli; hlt"); }
     }
 
-    /*--- 4. Temel Sistem Bilgileri ---*/
-    print_status_ok("VGA Text Mode surucusu aktif (80x25)");
-    print_status_ok("Kernel stack kuruldu (32 KB)");
+    /*=== 3. GDT Başlat ===*/
+    gdt_init();
+    print_ok("GDT yuklendi (5 segment: null, kcode, kdata, ucode, udata)");
 
-    print_status_info("Multiboot2 Info Adresi: ", "");
-    vga_put_hex((uint32_t)(uintptr_t)mbi_ptr);
-    vga_putchar('\n');
+    /*=== 4. IDT Başlat ===*/
+    idt_init();
+    print_ok("IDT yuklendi (48 gate: 32 exception + 16 IRQ)");
 
-    /*--- 5. Gelecek Fazlar İçin Yer Tutucu ---*/
+    /*=== 5. PIC Başlat ===*/
+    pic_init();
+    print_ok("PIC baslatildi (IRQ 0-15 → INT 32-47 remap)");
+
+    /*=== 6. PIT Başlat (100 Hz) ===*/
+    pit_init(100);
+    print_ok("PIT baslatildi (100 Hz, 10ms aralik)");
+
+    /*=== 7. Interrupt'ları Aç ===*/
+    __asm__ volatile ("sti");
+    print_ok("Interrupt'lar aktif (STI)");
+
+    /*=== 8. PIT Doğrulama ===*/
+    /* 20 tick bekle (200ms) ve sayacı kontrol et */
+    pit_sleep(20);
+
+    uint32_t ticks = pit_get_ticks();
+    if (ticks > 0) {
+        print_ok("PIT zamanlayici CALISIYOR");
+        print_info("  Tick sayisi: ", ticks);
+    } else {
+        print_fail("PIT zamanlayici calismadi!");
+    }
+
+    /*=== 9. Phase 1 Tamamlandı ===*/
     vga_puts("\n");
     vga_set_color(VGA_DARK_GREY, VGA_BLACK);
     vga_puts("  ---------------------------------------------------------\n");
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_puts("  Sonraki adimlar:\n");
     vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
-    vga_puts("    > GDT (Global Descriptor Table) kurulumu\n");
-    vga_puts("    > IDT (Interrupt Descriptor Table) kurulumu\n");
-    vga_puts("    > PIC ve PIT yapilandirmasi\n");
-    vga_puts("    > PS/2 klavye surucusu\n");
+    vga_puts("    > PS/2 klavye surucusu + Turkce Q klavye\n");
     vga_puts("    > Bellek yonetimi (PMM + Heap)\n");
+    vga_puts("    > VESA grafik modu (800x600x32)\n");
     vga_puts("\n");
-
     vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-    vga_puts("  WintakOS Phase 0 tamamlandi. Sistem hazir.\n");
+    vga_puts("  WintakOS Phase 1 tamamlandi. Interrupt altyapisi hazir.\n");
     vga_set_color(VGA_DARK_GREY, VGA_BLACK);
     vga_puts("  ---------------------------------------------------------\n");
 
-    /*--- 6. Sonsuz Döngü ---*/
-    /* kernel_main() dönerse boot.asm'deki halt döngüsüne düşer.
-     * Ama burada da açıkça bekliyoruz. */
+    /*=== 10. Ana Döngü ===*/
     while (1) {
         __asm__ volatile ("hlt");
     }
