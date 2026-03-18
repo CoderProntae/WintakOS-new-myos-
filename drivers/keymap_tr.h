@@ -6,16 +6,29 @@
 /*============================================================================
  * Turkce Q Klavye Haritasi
  *
- * Fiziksel pozisyon → Turkce karakter eslemesi:
- *   0x17 (US i)   → ı (CHAR_TR_DOTLESS_I)    / shift: I
- *   0x28 (US ')   → i                         / shift: İ (CHAR_TR_DOTTED_I)
- *   0x27 (US ;)   → ş (CHAR_TR_S_CEDILLA)    / shift: Ş
- *   0x1A (US [)   → ğ (CHAR_TR_G_BREVE)      / shift: Ğ
- *   0x1B (US ])   → ü (CP437: 0x81)          / shift: Ü (0x9A)
- *   0x33 (US ,)   → ö (CP437: 0x94)          / shift: Ö (0x99)
- *   0x34 (US .)   → ç (CP437: 0x87)          / shift: Ç (0x80)
- *   0x35 (US /)   → .                         / shift: :
- *   0x2B (US \)   → ,                         / shift: ;
+ * CP437 Turkce karakterler:
+ *   ü = 0x81    Ü = 0x9A
+ *   ö = 0x94    Ö = 0x99
+ *   ç = 0x87    Ç = 0x80
+ *
+ * Ozel font glifleri:
+ *   ı = 0x01    İ = 0x02
+ *   ş = 0x03    Ş = 0x04
+ *   ğ = 0x05    Ğ = 0x06
+ *
+ * Turkce Q fiziksel pozisyonlar:
+ *   0x17 (US i)  → ı / I (shift)
+ *   0x28 (US ')  → i / İ (shift)
+ *   0x27 (US ;)  → ş / Ş (shift)
+ *   0x1A (US [)  → ğ / Ğ (shift)
+ *   0x1B (US ])  → ü / Ü (shift)
+ *   0x33 (US ,)  → ö / Ö (shift)
+ *   0x34 (US .)  → ç / Ç (shift)
+ *   0x35 (US /)  → . / : (shift)
+ *   0x2B (US \)  → , / ; (shift)
+ *   0x29 (US `)  → " / é (shift, simdilik ")
+ *   0x0C (US -)  → * / ? (shift)
+ *   0x0D (US =)  → - / _ (shift)
  *==========================================================================*/
 
 static const char scancode_to_ascii[128] = {
@@ -43,10 +56,10 @@ static const char scancode_to_ascii_shift[128] = {
 /* 0x00 */   0,    0,   '!','\'', '^', '+', '%', '&',
 /* 0x08 */  '/', '(', ')', '=', '?', '_',  0,    0,
 /* 0x10 */  'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I',
-/* 0x18 */  'O', 'P', 0x06,0x9A,  0,    0,  'A', 'S',
+/* 0x18 */  'O', 'P', 0x06,'\x9A', 0,   0,  'A', 'S',
 /* 0x20 */  'D', 'F', 'G', 'H', 'J', 'K', 'L', 0x04,
-/* 0x28 */ 0x02,  0,   0,  ';', 'Z', 'X', 'C', 'V',
-/* 0x30 */  'B', 'N', 'M',0x99,0x80, ':',  0,  '*',
+/* 0x28 */ 0x02, '"',  0,  ';', 'Z', 'X', 'C', 'V',
+/* 0x30 */  'B', 'N', 'M','\x99','\x80',':',0, '*',
 /* 0x38 */   0,  ' ',  0,    0,    0,    0,    0,    0,
 /* 0x40 */   0,    0,    0,    0,    0,    0,    0,  '7',
 /* 0x48 */  '8', '9', '-', '4', '5', '6', '+', '1',
