@@ -11,6 +11,7 @@
 #include "../cpu/pic.h"
 #include "../cpu/pit.h"
 #include "../drivers/keyboard.h"
+#include "../drivers/vga_font.h"
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
 #define WINTAKOS_VERSION "0.3.0"
@@ -87,6 +88,9 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     print_ok("PIT zamanlayici aktif (100 Hz)");
 
     /* Milestone 2 */
+    vga_font_install_turkish();
+    print_ok("Turkce font glifleri yuklendi (ı İ ş Ş ğ Ğ)");
+    
     keyboard_init();
     print_ok("PS/2 klavye surucusu aktif (Turkce Q)");
 
