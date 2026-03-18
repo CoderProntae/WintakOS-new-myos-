@@ -37,7 +37,8 @@ C_SOURCES   := kernel/kernel.c \
                cpu/isr.c \
                cpu/pic.c \
                cpu/pit.c \
-               drivers/keyboard.c
+               drivers/keyboard.c \
+               drivers/vga_font.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
 C_OBJECTS   := $(C_SOURCES:.c=.o)
