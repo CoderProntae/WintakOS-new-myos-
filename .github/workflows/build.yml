@@ -1,7 +1,3 @@
-#=============================================================================
-# WintakOS - GitHub Actions CI/CD Pipeline (Phase 1)
-#=============================================================================
-
 name: WintakOS Build
 
 on:
@@ -12,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Derle ve Test Et
+    name: Milestone 2 - Derle ve Test Et
     runs-on: ubuntu-latest
 
     steps:
@@ -36,8 +32,6 @@ jobs:
         run: |
           gcc --version | head -1
           nasm --version
-          grub-mkrescue --version
-          qemu-system-i386 --version | head -1
 
       - name: Kernel derle
         run: make all
@@ -47,7 +41,6 @@ jobs:
 
       - name: QEMU boot testi
         run: |
-          echo "QEMU boot testi (5 saniye)..."
           timeout 5 qemu-system-i386 \
             -cdrom wintakos.iso \
             -m 128M \
@@ -60,13 +53,13 @@ jobs:
       - name: ISO artifact yukle
         uses: actions/upload-artifact@v4
         with:
-          name: wintakos-iso
+          name: wintakos-iso-m2
           path: wintakos.iso
           retention-days: 30
 
       - name: Kernel binary artifact yukle
         uses: actions/upload-artifact@v4
         with:
-          name: wintakos-kernel
+          name: wintakos-kernel-m2
           path: wintakos.bin
           retention-days: 30
