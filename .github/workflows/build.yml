@@ -1,12 +1,5 @@
 #=============================================================================
 # WintakOS - GitHub Actions CI/CD Pipeline
-#
-# Her push ve pull request'te otomatik olarak:
-#   1. Gerekli araçları kurar (nasm, gcc, grub, xorriso, qemu)
-#   2. Kernel'i derler
-#   3. Bootable ISO oluşturur
-#   4. ISO'yu artifact olarak yükler (indirilebilir)
-#   5. QEMU'da otomatik boot testi yapar
 #=============================================================================
 
 name: WintakOS Build
@@ -23,16 +16,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      #--- 1. Kaynak kodunu indir ---
       - name: Kaynak kodunu indir
         uses: actions/checkout@v4
 
-      #--- 2. Derleme araçlarını kur ---
+      #--- DÜZELTME BURADA ---
+      # gcc-multilib: 64-bit sistemde 32-bit derleme icin gerekli
+      # Bu paket 32-bit libgcc, libc gibi kutuphaneleri saglar
       - name: Derleme araclarini kur
         run: |
           sudo apt-get update
           sudo apt-get install -y \
             build-essential \
+            gcc-multilib \
             nasm \
             grub-pc-bin \
             grub-common \
@@ -40,23 +35,24 @@ jobs:
             mtools \
             qemu-system-x86
 
-      #--- 3. Araç versiyonlarını göster (debug için) ---
       - name: Arac versiyonlari
         run: |
           echo "=== GCC ==="
           gcc --version | head -1
           echo "=== NASM ==="
           nasm --version
+          echo "=== 32-bit libgcc kontrolu ==="
+          ls -la /usr/lib/gcc/x86_64-linux-gnu/*/32/libgcc.a 2>/dev/null && \
+            echo "32-bit libgcc BULUNDU" || \
+            echo "UYARI: 32-bit libgcc bulunamadi"
           echo "=== GRUB ==="
           grub-mkrescue --version
           echo "=== QEMU ==="
           qemu-system-i386 --version | head -1
 
-      #--- 4. Kernel'i derle ---
       - name: Kernel derle
         run: make all
 
-      #--- 5. Dosya kontrolü ---
       - name: Cikti dosyalarini kontrol et
         run: |
           echo "=== Kernel Binary ==="
@@ -72,8 +68,6 @@ jobs:
             echo "BASARILI: Multiboot2 uyumlu kernel" || \
             echo "HATA: Multiboot2 basligi bulunamadi!"
 
-      #--- 6. QEMU ile otomatik boot testi ---
-      # Kernel'i 3 saniye çalıştır, çökme olup olmadığını kontrol et
       - name: QEMU boot testi
         run: |
           echo "QEMU boot testi baslatiliyor (3 saniye)..."
@@ -84,9 +78,8 @@ jobs:
             -serial stdio \
             -no-reboot \
             -no-shutdown 2>&1 || true
-          echo "Boot testi tamamlandi (timeout beklenen davranis)."
+          echo "Boot testi tamamlandi."
 
-      #--- 7. ISO'yu artifact olarak yükle ---
       - name: ISO artifact yukle
         uses: actions/upload-artifact@v4
         with:
@@ -94,7 +87,6 @@ jobs:
           path: wintakos.iso
           retention-days: 30
 
-      #--- 8. Kernel binary'yi de yükle ---
       - name: Kernel binary artifact yukle
         uses: actions/upload-artifact@v4
         with:
