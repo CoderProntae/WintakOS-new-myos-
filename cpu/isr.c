@@ -10,7 +10,7 @@
 #include "idt.h"
 #include "gdt.h"
 #include "pic.h"
-#include "../kernel/vga.h"
+#include "kernel/vga.h"
 
 /*--- Handler tablosu (256 slot) ---*/
 static isr_handler_t interrupt_handlers[IDT_ENTRIES] = { 0 };
