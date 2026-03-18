@@ -64,27 +64,40 @@ void vga_putchar(char c)
             vga_col = 0;
             vga_row++;
             break;
+
         case '\r':
             vga_col = 0;
             break;
+
         case '\t':
             vga_col = (vga_col + 8) & ~7;
-            if (vga_col >= VGA_WIDTH) { vga_col = 0; vga_row++; }
+            if (vga_col >= VGA_WIDTH) {
+                vga_col = 0;
+                vga_row++;
+            }
             break;
+
         case '\b':
             if (vga_col > 0) {
                 vga_col--;
                 vga_buffer[vga_row * VGA_WIDTH + vga_col] = vga_entry(' ', vga_attr);
             }
             break;
+
         default:
+            /* Tum yazdirılabilir karakterler (CP437 dahil) */
             vga_buffer[vga_row * VGA_WIDTH + vga_col] = vga_entry(c, vga_attr);
             vga_col++;
-            if (vga_col >= VGA_WIDTH) { vga_col = 0; vga_row++; }
+            if (vga_col >= VGA_WIDTH) {
+                vga_col = 0;
+                vga_row++;
+            }
             break;
     }
-    if (vga_row >= VGA_HEIGHT) vga_scroll();
-    vga_update_hw_cursor();
+
+    if (vga_row >= VGA_HEIGHT) {
+        vga_scroll();
+    }
 }
 
 void vga_puts(const char* str)
