@@ -9,7 +9,7 @@
 #define KBD_STATUS_PORT  0x64
 #define KBD_BUFFER_SIZE  256
 
-static char kbd_buffer[KBD_BUFFER_SIZE];
+static unsigned char kbd_buffer[KBD_BUFFER_SIZE];
 static volatile uint32_t kbd_read_pos  = 0;
 static volatile uint32_t kbd_write_pos = 0;
 
@@ -20,7 +20,7 @@ static key_modifiers_t modifiers = {0, 0, 0, 0, 0};
 /* Extended scancode durumu (0xE0 prefix) */
 static volatile bool extended_scancode = false;
 
-static void kbd_buffer_put(char c)
+static void kbd_buffer_put(unsigned char c)
 {
     uint32_t next = (kbd_write_pos + 1) % KBD_BUFFER_SIZE;
     if (next != kbd_read_pos) {
@@ -205,9 +205,9 @@ void keyboard_init(void)
 char keyboard_getchar(void)
 {
     if (kbd_read_pos == kbd_write_pos) return 0;
-    char c = kbd_buffer[kbd_read_pos];
+    unsigned char c = kbd_buffer[kbd_read_pos];
     kbd_read_pos = (kbd_read_pos + 1) % KBD_BUFFER_SIZE;
-    return c;
+    return (char)c;
 }
 
 bool keyboard_poll(key_event_t* event)
