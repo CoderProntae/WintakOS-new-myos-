@@ -17,6 +17,9 @@ static volatile key_event_t last_event;
 static volatile bool        event_ready = false;
 static key_modifiers_t modifiers = {0, 0, 0, 0, 0};
 
+/* Extended scancode durumu (0xE0 prefix) */
+static volatile bool extended_scancode = false;
+
 static void kbd_buffer_put(char c)
 {
     uint32_t next = (kbd_write_pos + 1) % KBD_BUFFER_SIZE;
@@ -26,14 +29,12 @@ static void kbd_buffer_put(char c)
     }
 }
 
-/* Bir karakter harf mi? (CapsLock icin) */
 static bool is_letter(char c)
 {
     if (c >= 'a' && c <= 'z') return true;
-    if (c == CHAR_TR_DOTLESS_I)    return true;  /* ı */
-    if (c == CHAR_TR_S_CEDILLA)    return true;  /* ş */
-    if (c == CHAR_TR_G_BREVE)      return true;  /* ğ */
-    /* i zaten 'a'-'z' araliginda */
+    if (c == CHAR_TR_DOTLESS_I) return true;
+    if (c == CHAR_TR_S_CEDILLA) return true;
+    if (c == CHAR_TR_G_BREVE)   return true;
     return false;
 }
 
@@ -67,11 +68,39 @@ static uint8_t scancode_to_keycode(uint8_t sc)
     }
 }
 
+/* Extended scancode (0xE0 prefix) → ozel tus kodu */
+static uint8_t extended_to_keycode(uint8_t sc)
+{
+    switch (sc) {
+        case 0x48: return KEY_UP;
+        case 0x50: return KEY_DOWN;
+        case 0x4B: return KEY_LEFT;
+        case 0x4D: return KEY_RIGHT;
+        case 0x47: return KEY_HOME;
+        case 0x4F: return KEY_END;
+        case 0x49: return KEY_PAGEUP;
+        case 0x51: return KEY_PAGEDOWN;
+        case 0x52: return KEY_INSERT;
+        case 0x53: return KEY_DELETE;
+        case 0x1C: return KEY_ENTER;     /* Numpad Enter */
+        case 0x1D: return KEY_LCTRL;     /* Right Ctrl */
+        case 0x38: return KEY_LALT;      /* Right Alt (AltGr) */
+        default:   return KEY_NONE;
+    }
+}
+
 static void keyboard_handler(registers_t* regs)
 {
     (void)regs;
 
     uint8_t scancode = inb(KBD_DATA_PORT);
+
+    /* 0xE0 prefix: sonraki byte extended scancode */
+    if (scancode == 0xE0) {
+        extended_scancode = true;
+        return;
+    }
+
     uint8_t released = scancode & 0x80;
     uint8_t sc       = scancode & 0x7F;
 
@@ -81,6 +110,27 @@ static void keyboard_handler(registers_t* regs)
     ev.scancode = scancode;
     ev.released = released ? 1 : 0;
 
+    if (extended_scancode) {
+        /* Extended tus (ok tuslari, Home, End vb.) */
+        extended_scancode = false;
+
+        if (!released) {
+            ev.keycode = extended_to_keycode(sc);
+        }
+        /* Extended tuslar icin modifier guncelleme */
+        if (sc == 0x1D) {
+            modifiers.ctrl = released ? 0 : 1;
+        } else if (sc == 0x38) {
+            modifiers.alt = released ? 0 : 1;
+        }
+
+        ev.mods = modifiers;
+        last_event = ev;
+        event_ready = true;
+        return;
+    }
+
+    /* Normal scancode */
     if (sc == 0x2A || sc == 0x36) {
         modifiers.shift = released ? 0 : 1;
         ev.keycode = (sc == 0x2A) ? KEY_LSHIFT : KEY_RSHIFT;
@@ -113,7 +163,6 @@ static void keyboard_handler(registers_t* regs)
         else if (sc < 128) {
             bool use_shift = modifiers.shift;
 
-            /* CapsLock: sadece harfleri etkiler */
             if (modifiers.capslock) {
                 char normal = scancode_to_ascii[sc];
                 if (is_letter(normal)) {
@@ -143,6 +192,7 @@ void keyboard_init(void)
     kbd_read_pos  = 0;
     kbd_write_pos = 0;
     event_ready   = false;
+    extended_scancode = false;
 
     while (inb(KBD_STATUS_PORT) & 0x01) {
         inb(KBD_DATA_PORT);
