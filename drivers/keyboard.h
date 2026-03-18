@@ -50,12 +50,12 @@ typedef struct {
 
 /* Klavye olayı */
 typedef struct {
-    char    ascii;          /* ASCII karakter (0 = ozel tus) */
-    uint8_t keycode;        /* Ozel tus kodu */
-    uint8_t scancode;       /* Ham scancode */
-    uint8_t released;       /* 1 = tus birakildi */
-    key_modifiers_t mods;   /* Modifier durumlari */
-} key_event_t;
+    unsigned char ascii;    /* Karakter (0 = ozel tus) */
+    uint8_t keycode;
+    uint8_t scancode;
+    uint8_t released;
+    key_modifiers_t mods;
+} __attribute__((packed)) key_event_t;
 
 void keyboard_init(void);
 
