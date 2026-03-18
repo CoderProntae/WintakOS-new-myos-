@@ -233,3 +233,13 @@ void vga_put_dec(uint32_t value)
         vga_putchar(buf[i]);
     }
 }
+
+uint8_t vga_get_row(void)
+{
+    return vga_row;
+}
+
+uint8_t vga_get_col(void)
+{
+    return vga_col;
+}
