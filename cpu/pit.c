@@ -15,10 +15,9 @@
  *==========================================================================*/
 
 #include "pit.h"
+#include "ports.h"
 #include "isr.h"
 #include "pic.h"
-#include "ports.h"
-
 /*--- Tick sayacı (volatile: interrupt handler'da değiştirilir) ---*/
 static volatile uint32_t pit_ticks = 0;
 
