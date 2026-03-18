@@ -1,23 +1,40 @@
 /*============================================================================
  * WintakOS - kernel.c
- * Kernel Ana Giriş Noktası — Phase 1
- *
- * Phase 0: VGA Text Mode ✓
- * Phase 1: GDT + IDT + PIC + ISR + PIT ✓
+ * Kernel Ana Giris Noktasi — Phase 1
  *==========================================================================*/
 
-#include "types.h"
-#include "vga.h"
-#include "cpu/gdt.h"
-#include "cpu/idt.h"
-#include "cpu/isr.h"
-#include "cpu/pic.h"
-#include "cpu/pit.h"
+#ifndef WINTAKOS_TYPES_H
+#include "../include/types.h"
+#endif
+
+#ifndef WINTAKOS_VGA_H
+#include "../kernel/vga.h"
+#endif
+
+#ifndef WINTAKOS_GDT_H
+#include "../cpu/gdt.h"
+#endif
+
+#ifndef WINTAKOS_IDT_H
+#include "../cpu/idt.h"
+#endif
+
+#ifndef WINTAKOS_ISR_H
+#include "../cpu/isr.h"
+#endif
+
+#ifndef WINTAKOS_PIC_H
+#include "../cpu/pic.h"
+#endif
+
+#ifndef WINTAKOS_PIT_H
+#include "../cpu/pit.h"
+#endif
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
 
 /*==========================================================================
- * Yardımcı Fonksiyonlar
+ * Yardimci Fonksiyonlar
  *========================================================================*/
 
 static void print_banner(void)
@@ -74,7 +91,7 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     vga_init();
     print_banner();
 
-    /* --- Multiboot2 Doğrulama --- */
+    /* --- Multiboot2 Dogrulama --- */
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
         print_fail("Multiboot2 dogrulama BASARISIZ!");
         vga_puts("    Beklenen: "); vga_put_hex(MULTIBOOT2_BOOTLOADER_MAGIC);
@@ -84,7 +101,7 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     }
     print_ok("Multiboot2 dogrulama basarili");
 
-    /* --- Phase 1: Interrupt Altyapısı --- */
+    /* --- Phase 1: Interrupt Altyapisi --- */
 
     gdt_init();
     print_ok("GDT kuruldu (Null + KernelCode + KernelData)");
@@ -101,18 +118,18 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     pit_init(PIT_FREQUENCY);
     print_ok("PIT zamanlayici aktif (100 Hz)");
 
-    /* Interrupt'ları etkinleştir */
+    /* Interruptlari etkinlestir */
     __asm__ volatile("sti");
     print_ok("Kesme sistemi aktif (STI)");
 
-    /* --- Durum Özeti --- */
+    /* --- Durum Ozeti --- */
     vga_puts("\n");
     vga_set_color(VGA_DARK_GREY, VGA_BLACK);
     vga_puts("  ---------------------------------------------------------\n");
     vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
     vga_puts("  Phase 1 tamamlandi. Sistem calisyor.\n\n");
 
-    /* Canlı süre göstergesi — PIT'in çalıştığını kanıtlar */
+    /* Canli sure gostergesi */
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_puts("  Calisma suresi: ");
     uint8_t timer_row = vga_get_row();
@@ -123,7 +140,7 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     vga_puts("  Sonraki: Phase 2 - PS/2 Klavye + Turkce Q Klavye Duzeni\n");
     vga_puts("  ---------------------------------------------------------\n");
 
-    /* Ana döngü: her saniyede süreyi güncelle */
+    /* Ana dongu: her saniyede sureyi guncelle */
     uint32_t last_second = 0;
 
     while (1) {
@@ -139,7 +156,6 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
             vga_puts(" saniye    ");
         }
 
-        /* CPU'yu düşük güç moduna al, sonraki interrupt'a kadar bekle */
         __asm__ volatile("hlt");
     }
 }
