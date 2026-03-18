@@ -66,4 +66,10 @@ void vga_put_dec(uint32_t value);
 /* İmleci belirtilen konuma taşı */
 void vga_set_cursor(uint8_t row, uint8_t col);
 
+/* Mevcut imleç satırını döndür */
+uint8_t vga_get_row(void);
+
+/* Mevcut imleç sütununu döndür */
+uint8_t vga_get_col(void);
+
 #endif /* WINTAKOS_VGA_H */
