@@ -1,156 +1,115 @@
-/*============================================================================
- * WintakOS - isr.c
- * Interrupt Service Routines - Uygulama
- *
- * Assembly stub'ları tarafından çağrılan ana C handler.
- * Exception'ları yakalar, IRQ'ları dispatch eder, EOI gönderir.
- *==========================================================================*/
-
 #include "isr.h"
 #include "idt.h"
 #include "gdt.h"
 #include "pic.h"
-#include "kernel/vga.h"
+#include "../kernel/vga.h"
 
-/*--- Handler tablosu (256 slot) ---*/
-static isr_handler_t interrupt_handlers[IDT_ENTRIES] = { 0 };
+static irq_handler_t irq_handlers[16];
 
-/*--- CPU Exception isimleri (debug ve panic ekranı için) ---*/
-static const char* const exception_names[32] = {
-    "Division By Zero",             /*  0 */
-    "Debug",                        /*  1 */
-    "Non-Maskable Interrupt",       /*  2 */
-    "Breakpoint",                   /*  3 */
-    "Overflow",                     /*  4 */
-    "Bound Range Exceeded",         /*  5 */
-    "Invalid Opcode",               /*  6 */
-    "Device Not Available",         /*  7 */
-    "Double Fault",                 /*  8 */
-    "Coprocessor Segment Overrun",  /*  9 */
-    "Invalid TSS",                  /* 10 */
-    "Segment Not Present",          /* 11 */
-    "Stack-Segment Fault",          /* 12 */
-    "General Protection Fault",     /* 13 */
-    "Page Fault",                   /* 14 */
-    "Reserved",                     /* 15 */
-    "x87 Floating-Point Exception", /* 16 */
-    "Alignment Check",              /* 17 */
-    "Machine Check",                /* 18 */
-    "SIMD Floating-Point",          /* 19 */
-    "Virtualization Exception",     /* 20 */
-    "Control Protection Exception", /* 21 */
-    "Reserved", "Reserved",         /* 22-23 */
-    "Reserved", "Reserved",         /* 24-25 */
-    "Reserved", "Reserved",         /* 26-27 */
-    "Hypervisor Injection",         /* 28 */
-    "VMM Communication Exception",  /* 29 */
-    "Security Exception",           /* 30 */
-    "Reserved"                      /* 31 */
+static const char* exception_names[32] = {
+    "Division By Zero",           "Debug",
+    "Non Maskable Interrupt",     "Breakpoint",
+    "Overflow",                   "Bound Range Exceeded",
+    "Invalid Opcode",             "Device Not Available",
+    "Double Fault",               "Coprocessor Overrun",
+    "Invalid TSS",                "Segment Not Present",
+    "Stack-Segment Fault",        "General Protection Fault",
+    "Page Fault",                 "Reserved",
+    "x87 FPU Error",              "Alignment Check",
+    "Machine Check",              "SIMD FPU Exception",
+    "Virtualization Exception",   "Control Protection",
+    "Reserved", "Reserved", "Reserved", "Reserved",
+    "Reserved", "Reserved",       "Hypervisor Injection",
+    "VMM Communication",          "Security Exception",
+    "Reserved"
 };
 
-/*==========================================================================
- * Kernel Panic Ekranı
- *
- * İşlenemeyen bir CPU exception oluştuğunda kırmızı ekranda
- * detaylı bilgi gösterir ve sistemi durdurur.
- *========================================================================*/
-static void kernel_panic(registers_t* regs)
+void irq_register_handler(uint8_t irq, irq_handler_t handler)
 {
-    /* Kırmızı arka plan, beyaz yazı */
-    vga_set_color(VGA_WHITE, VGA_RED);
-    vga_clear();
-
-    vga_puts("\n");
-    vga_puts("  ============================================================\n");
-    vga_puts("  KERNEL PANIC - Islenemeyen CPU Exception!\n");
-    vga_puts("  ============================================================\n\n");
-
-    /* Exception bilgisi */
-    vga_puts("  Exception: ");
-    if (regs->int_no < 32) {
-        vga_puts(exception_names[regs->int_no]);
-    } else {
-        vga_puts("Bilinmeyen");
-    }
-    vga_puts(" (INT ");
-    vga_put_dec(regs->int_no);
-    vga_puts(")\n");
-
-    vga_puts("  Error Code: ");
-    vga_put_hex(regs->err_code);
-    vga_puts("\n\n");
-
-    /* Register dump */
-    vga_puts("  --- Register Dump ---\n");
-
-    vga_puts("  EAX="); vga_put_hex(regs->eax);
-    vga_puts("  EBX="); vga_put_hex(regs->ebx);
-    vga_puts("  ECX="); vga_put_hex(regs->ecx);
-    vga_puts("\n");
-
-    vga_puts("  EDX="); vga_put_hex(regs->edx);
-    vga_puts("  ESI="); vga_put_hex(regs->esi);
-    vga_puts("  EDI="); vga_put_hex(regs->edi);
-    vga_puts("\n");
-
-    vga_puts("  EBP="); vga_put_hex(regs->ebp);
-    vga_puts("  ESP="); vga_put_hex(regs->esp);
-    vga_puts("\n");
-
-    vga_puts("  EIP="); vga_put_hex(regs->eip);
-    vga_puts("  CS=");  vga_put_hex(regs->cs);
-    vga_puts("  EFLAGS="); vga_put_hex(regs->eflags);
-    vga_puts("\n\n");
-
-    vga_puts("  Sistem durduruluyor.\n");
-    vga_puts("  ============================================================\n");
-
-    /* Sistemi durdur */
-    __asm__ volatile ("cli");
-    for (;;) {
-        __asm__ volatile ("hlt");
+    if (irq < 16) {
+        irq_handlers[irq] = handler;
     }
 }
 
-/*==========================================================================
- * Handler kayıt fonksiyonları
- *========================================================================*/
-void isr_register_handler(uint8_t num, isr_handler_t handler)
-{
-    interrupt_handlers[num] = handler;
-}
-
-void isr_unregister_handler(uint8_t num)
-{
-    interrupt_handlers[num] = NULL;
-}
-
-/*==========================================================================
- * Ana interrupt dispatch fonksiyonu
- *
- * isr_stub.asm'deki isr_common_stub tarafından çağrılır.
- * Bu fonksiyon C calling convention ile çağrılır:
- *   void isr_handler(registers_t* regs)
- *
- * İki ana görev:
- *   1. Kayıtlı handler varsa çağır, yoksa exception ise panic
- *   2. IRQ ise PIC'e EOI gönder
- *========================================================================*/
 void isr_handler(registers_t* regs)
 {
-    uint32_t int_no = regs->int_no;
+    if (regs->int_no < 32) {
+        vga_set_color(VGA_WHITE, VGA_RED);
+        vga_puts("\n EXCEPTION: ");
+        vga_puts(exception_names[regs->int_no]);
+        vga_puts(" (#");
+        vga_put_dec(regs->int_no);
+        vga_puts(")\n");
 
-    if (interrupt_handlers[int_no] != NULL) {
-        /* Kayıtlı handler'ı çağır */
-        interrupt_handlers[int_no](regs);
-    } else if (int_no < 32) {
-        /* İşlenemeyen CPU exception → kernel panic */
-        kernel_panic(regs);
-    }
-    /* IRQ handler kaydedilmemişse sessizce geç (spurious interrupt) */
+        vga_set_color(VGA_WHITE, VGA_BLACK);
+        vga_puts("  Error Code: "); vga_put_hex(regs->err_code);
+        vga_puts("\n  EIP:        "); vga_put_hex(regs->eip);
+        vga_puts("\n  CS:         "); vga_put_hex(regs->cs);
+        vga_puts("\n  EFLAGS:     "); vga_put_hex(regs->eflags);
+        vga_puts("\n\n  Sistem durduruluyor.\n");
 
-    /* Donanım IRQ'ları için End of Interrupt sinyali gönder */
-    if (int_no >= 32 && int_no < 48) {
-        pic_send_eoi((uint8_t)(int_no - 32));
+        while (1) { __asm__ volatile("cli; hlt"); }
     }
+    else if (regs->int_no >= 32 && regs->int_no <= 47) {
+        uint8_t irq = (uint8_t)(regs->int_no - 32);
+
+        if (irq_handlers[irq]) {
+            irq_handlers[irq](regs);
+        }
+
+        pic_send_eoi(irq);
+    }
+}
+
+void isr_init(void)
+{
+    idt_set_gate(0,  (uint32_t)isr0,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(1,  (uint32_t)isr1,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(2,  (uint32_t)isr2,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(3,  (uint32_t)isr3,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(4,  (uint32_t)isr4,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(5,  (uint32_t)isr5,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(6,  (uint32_t)isr6,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(7,  (uint32_t)isr7,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(8,  (uint32_t)isr8,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(9,  (uint32_t)isr9,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(10, (uint32_t)isr10, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(11, (uint32_t)isr11, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(12, (uint32_t)isr12, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(13, (uint32_t)isr13, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(14, (uint32_t)isr14, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(15, (uint32_t)isr15, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(16, (uint32_t)isr16, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(17, (uint32_t)isr17, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(18, (uint32_t)isr18, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(19, (uint32_t)isr19, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(20, (uint32_t)isr20, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(21, (uint32_t)isr21, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(22, (uint32_t)isr22, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(23, (uint32_t)isr23, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(24, (uint32_t)isr24, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(25, (uint32_t)isr25, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(26, (uint32_t)isr26, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(27, (uint32_t)isr27, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(28, (uint32_t)isr28, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(29, (uint32_t)isr29, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(30, (uint32_t)isr30, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(31, (uint32_t)isr31, GDT_KERNEL_CODE, 0x8E);
+
+    idt_set_gate(32, (uint32_t)irq0,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(33, (uint32_t)irq1,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(34, (uint32_t)irq2,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(35, (uint32_t)irq3,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(36, (uint32_t)irq4,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(37, (uint32_t)irq5,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(38, (uint32_t)irq6,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(39, (uint32_t)irq7,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(40, (uint32_t)irq8,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(41, (uint32_t)irq9,  GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(42, (uint32_t)irq10, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(43, (uint32_t)irq11, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(44, (uint32_t)irq12, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(45, (uint32_t)irq13, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(46, (uint32_t)irq14, GDT_KERNEL_CODE, 0x8E);
+    idt_set_gate(47, (uint32_t)irq15, GDT_KERNEL_CODE, 0x8E);
 }
