@@ -12,10 +12,10 @@
 typedef struct {
     window_t*  win;
     char       buffer[TERM_BUF_LINES][TERM_COLS + 1];
-    uint32_t   buf_top;       /* En ust gorunen satir */
-    uint32_t   buf_count;     /* Toplam satir sayisi */
+    uint32_t   buf_count;
     char       cmd[TERM_CMD_MAX];
     uint32_t   cmd_len;
+    uint32_t   cmd_cursor;   /* Imleç pozisyonu */
     uint32_t   fg_color;
     uint32_t   bg_color;
     bool       active;
@@ -23,6 +23,7 @@ typedef struct {
 
 terminal_t* terminal_create(int32_t x, int32_t y);
 void terminal_input_char(terminal_t* term, uint8_t c);
+void terminal_input_key(terminal_t* term, uint8_t keycode);
 void terminal_print(terminal_t* term, const char* str);
 void terminal_print_color(terminal_t* term, const char* str, uint32_t color);
 
