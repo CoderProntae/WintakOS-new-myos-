@@ -17,10 +17,8 @@ void widget_draw_label(window_t* win, uint32_t rx, uint32_t ry,
                        const char* text, uint32_t color)
 {
     if (!(win->flags & WIN_FLAG_VISIBLE)) return;
-
     int32_t px = win->x + (int32_t)rx;
     int32_t py = win->y + (int32_t)ry;
-
     if (px < 0 || py < 0) return;
 
     while (*text) {
@@ -35,10 +33,8 @@ void widget_draw_button(window_t* win, uint32_t rx, uint32_t ry,
                         uint32_t bg, uint32_t fg)
 {
     if (!(win->flags & WIN_FLAG_VISIBLE)) return;
-
     int32_t px = win->x + (int32_t)rx;
     int32_t py = win->y + (int32_t)ry;
-
     if (px < 0 || py < 0) return;
 
     fb_fill_rect((uint32_t)px, (uint32_t)py, w, h, bg);
@@ -47,13 +43,12 @@ void widget_draw_button(window_t* win, uint32_t rx, uint32_t ry,
     fb_fill_rect((uint32_t)px, (uint32_t)py + h - 1, w, 1, RGB(60, 60, 60));
     fb_fill_rect((uint32_t)px + w - 1, (uint32_t)py, 1, h, RGB(60, 60, 60));
 
-    uint32_t text_len = 0;
+    uint32_t tlen = 0;
     const char* p = text;
-    while (*p++) text_len++;
+    while (*p++) tlen++;
 
-    int32_t tx = px + (int32_t)((w - text_len * 8) / 2);
+    int32_t tx = px + (int32_t)((w - tlen * 8) / 2);
     int32_t ty = py + (int32_t)((h - 16) / 2);
-
     if (tx < 0 || ty < 0) return;
 
     p = text;
@@ -62,4 +57,13 @@ void widget_draw_button(window_t* win, uint32_t rx, uint32_t ry,
         tx += 8;
         p++;
     }
+}
+
+bool widget_button_hit(window_t* win, uint32_t rx, uint32_t ry,
+                       uint32_t w, uint32_t h,
+                       int32_t click_rx, int32_t click_ry)
+{
+    (void)win;
+    return (click_rx >= (int32_t)rx && click_rx < (int32_t)(rx + w) &&
+            click_ry >= (int32_t)ry && click_ry < (int32_t)(ry + h));
 }
