@@ -20,7 +20,6 @@ static uint8_t  prev_buttons = 0;
 static bool     start_menu_visible = false;
 static uint32_t last_update_tick = 0;
 
-/* Tema renkleri */
 static uint32_t theme_bg_top;
 static uint32_t theme_bg_bot;
 static uint32_t theme_taskbar;
@@ -30,21 +29,21 @@ static uint32_t theme_btn;
 static void apply_theme(uint8_t theme)
 {
     switch (theme) {
-        case 1: /* Acik */
+        case 1:
             theme_bg_top = RGB(180, 200, 230);
             theme_bg_bot = RGB(220, 230, 245);
             theme_taskbar = RGB(220, 220, 230);
             theme_taskbar_text = RGB(30, 30, 30);
             theme_btn = RGB(100, 140, 200);
             break;
-        case 2: /* Mavi */
+        case 2:
             theme_bg_top = RGB(10, 40, 120);
             theme_bg_bot = RGB(30, 80, 180);
             theme_taskbar = RGB(10, 30, 80);
             theme_taskbar_text = COLOR_WHITE;
             theme_btn = RGB(20, 60, 140);
             break;
-        default: /* Koyu */
+        default:
             theme_bg_top = RGB(20, 30, 80);
             theme_bg_bot = RGB(40, 60, 140);
             theme_taskbar = RGB(25, 25, 40);
@@ -76,26 +75,32 @@ static void draw_string_px(uint32_t px, uint32_t py, const char* str, uint32_t f
     }
 }
 
+static uint32_t gradient_color_at(uint32_t y, uint32_t height)
+{
+    if (height == 0) height = 1;
+    uint32_t ratio = y * 255 / height;
+    uint8_t r = (uint8_t)(((theme_bg_top >> 16) & 0xFF) * (255 - ratio) / 255 +
+                           ((theme_bg_bot >> 16) & 0xFF) * ratio / 255);
+    uint8_t g = (uint8_t)(((theme_bg_top >> 8) & 0xFF) * (255 - ratio) / 255 +
+                           ((theme_bg_bot >> 8) & 0xFF) * ratio / 255);
+    uint8_t b = (uint8_t)((theme_bg_top & 0xFF) * (255 - ratio) / 255 +
+                           (theme_bg_bot & 0xFF) * ratio / 255);
+    return RGB(r, g, b);
+}
+
 static void draw_background(void)
 {
     uint32_t bg_h = screen_h - TASKBAR_HEIGHT;
     for (uint32_t y = 0; y < bg_h; y++) {
-        uint32_t ratio = y * 255 / bg_h;
-        uint8_t r = (uint8_t)(((theme_bg_top >> 16) & 0xFF) * (255 - ratio) / 255 +
-                               ((theme_bg_bot >> 16) & 0xFF) * ratio / 255);
-        uint8_t g = (uint8_t)(((theme_bg_top >> 8) & 0xFF) * (255 - ratio) / 255 +
-                               ((theme_bg_bot >> 8) & 0xFF) * ratio / 255);
-        uint8_t b = (uint8_t)((theme_bg_top & 0xFF) * (255 - ratio) / 255 +
-                               (theme_bg_bot & 0xFF) * ratio / 255);
-        uint32_t color = RGB(r, g, b);
+        uint32_t color = gradient_color_at(y, bg_h);
         for (uint32_t x = 0; x < screen_w; x++)
             fb_put_pixel(x, y, color);
     }
 
-    /* Kullanici karsilama */
     setup_config_t* cfg = setup_get_config();
+    uint32_t text_bg = gradient_color_at(30, bg_h);
+
     if (cfg->completed && strlen(cfg->username) > 0) {
-        /* "Hos geldin, KullaniciAdi" */
         char msg[48];
         uint32_t p = 0;
         const char* prefix = "Ho\x03 geldin, ";
@@ -103,17 +108,13 @@ static void draw_background(void)
         const char* u = cfg->username;
         while (*u) msg[p++] = *u++;
         msg[p] = '\0';
-
         draw_string_px(screen_w / 2 - (p * 8) / 2, 30, msg,
-                       RGB(220, 220, 255), RGB(r_at_30(theme_bg_top, theme_bg_bot, 30, screen_h - TASKBAR_HEIGHT)));
+                       RGB(220, 220, 255), text_bg);
     } else {
         draw_string_px(screen_w / 2 - 60, 30, "WintakOS v0.8.0",
-                       RGB(200, 200, 255), RGB(22, 32, 84));
+                       RGB(200, 200, 255), text_bg);
     }
 }
-
-/* Yardimci: gradient'ta belirli y'deki arka plan rengi */
-
 
 static void draw_taskbar(void)
 {
@@ -121,26 +122,50 @@ static void draw_taskbar(void)
     fb_fill_rect(0, ty, screen_w, TASKBAR_HEIGHT, theme_taskbar);
     fb_fill_rect(0, ty, screen_w, 1, RGB(60, 60, 100));
 
-    uint32_t btn_c = start_menu_visible ? RGB(theme_btn + 0x202020) : theme_btn;
+    uint32_t btn_c;
+    if (start_menu_visible) {
+        uint8_t br = (uint8_t)((theme_btn >> 16) & 0xFF);
+        uint8_t bg = (uint8_t)((theme_btn >> 8) & 0xFF);
+        uint8_t bb = (uint8_t)(theme_btn & 0xFF);
+        if (br < 224) br += 32; else br = 255;
+        if (bg < 224) bg += 32; else bg = 255;
+        if (bb < 224) bb += 32; else bb = 255;
+        btn_c = RGB(br, bg, bb);
+    } else {
+        btn_c = theme_btn;
+    }
+
     fb_fill_rect(4, ty + 4, 80, TASKBAR_HEIGHT - 8, btn_c);
     draw_string_px(12, ty + 8, "Ba\x03lat", theme_taskbar_text, btn_c);
 
     rtc_time_t t;
     rtc_read(&t);
     char ts[9];
-    ts[0]='0'+(char)(t.hour/10); ts[1]='0'+(char)(t.hour%10); ts[2]=':';
-    ts[3]='0'+(char)(t.minute/10); ts[4]='0'+(char)(t.minute%10); ts[5]=':';
-    ts[6]='0'+(char)(t.second/10); ts[7]='0'+(char)(t.second%10); ts[8]=0;
+    ts[0] = '0' + (char)(t.hour / 10);
+    ts[1] = '0' + (char)(t.hour % 10);
+    ts[2] = ':';
+    ts[3] = '0' + (char)(t.minute / 10);
+    ts[4] = '0' + (char)(t.minute % 10);
+    ts[5] = ':';
+    ts[6] = '0' + (char)(t.second / 10);
+    ts[7] = '0' + (char)(t.second % 10);
+    ts[8] = '\0';
     draw_string_px(screen_w - 80, ty + 8, ts, theme_taskbar_text, theme_taskbar);
 
     char ds[11];
-    ds[0]='0'+(char)(t.day/10); ds[1]='0'+(char)(t.day%10); ds[2]='/';
-    ds[3]='0'+(char)(t.month/10); ds[4]='0'+(char)(t.month%10); ds[5]='/';
-    ds[6]='0'+(char)((t.year/1000)%10); ds[7]='0'+(char)((t.year/100)%10);
-    ds[8]='0'+(char)((t.year/10)%10); ds[9]='0'+(char)(t.year%10); ds[10]=0;
+    ds[0] = '0' + (char)(t.day / 10);
+    ds[1] = '0' + (char)(t.day % 10);
+    ds[2] = '/';
+    ds[3] = '0' + (char)(t.month / 10);
+    ds[4] = '0' + (char)(t.month % 10);
+    ds[5] = '/';
+    ds[6] = '0' + (char)((t.year / 1000) % 10);
+    ds[7] = '0' + (char)((t.year / 100) % 10);
+    ds[8] = '0' + (char)((t.year / 10) % 10);
+    ds[9] = '0' + (char)(t.year % 10);
+    ds[10] = '\0';
     draw_string_px(screen_w - 168, ty + 8, ds, RGB(160, 160, 180), theme_taskbar);
 
-    /* Kullanici adi goster */
     setup_config_t* cfg = setup_get_config();
     if (cfg->completed && strlen(cfg->username) > 0) {
         draw_string_px(100, ty + 8, cfg->username, RGB(160, 180, 220), theme_taskbar);
@@ -178,20 +203,20 @@ static void cursor_save_bg(int32_t cx, int32_t cy)
 {
     for (uint32_t y = 0; y < CURSOR_H; y++)
         for (uint32_t x = 0; x < CURSOR_W; x++) {
-            int32_t px = cx+(int32_t)x, py = cy+(int32_t)y;
-            if (px>=0 && py>=0 && px<(int32_t)screen_w && py<(int32_t)screen_h)
-                cursor_save_buf[y*CURSOR_W+x] = fb_get_pixel((uint32_t)px,(uint32_t)py);
+            int32_t px = cx + (int32_t)x, py = cy + (int32_t)y;
+            if (px >= 0 && py >= 0 && px < (int32_t)screen_w && py < (int32_t)screen_h)
+                cursor_save_buf[y * CURSOR_W + x] = fb_get_pixel((uint32_t)px, (uint32_t)py);
         }
 }
 
 static void cursor_restore_bg(int32_t cx, int32_t cy)
 {
-    if (cx<0 && cy<0) return;
+    if (cx < 0 && cy < 0) return;
     for (uint32_t y = 0; y < CURSOR_H; y++)
         for (uint32_t x = 0; x < CURSOR_W; x++) {
-            int32_t px = cx+(int32_t)x, py = cy+(int32_t)y;
-            if (px>=0 && py>=0 && px<(int32_t)screen_w && py<(int32_t)screen_h)
-                fb_put_pixel((uint32_t)px,(uint32_t)py, cursor_save_buf[y*CURSOR_W+x]);
+            int32_t px = cx + (int32_t)x, py = cy + (int32_t)y;
+            if (px >= 0 && py >= 0 && px < (int32_t)screen_w && py < (int32_t)screen_h)
+                fb_put_pixel((uint32_t)px, (uint32_t)py, cursor_save_buf[y * CURSOR_W + x]);
         }
 }
 
@@ -199,11 +224,11 @@ static void cursor_draw(int32_t cx, int32_t cy)
 {
     for (uint32_t y = 0; y < CURSOR_H; y++)
         for (uint32_t x = 0; x < CURSOR_W; x++) {
-            int32_t px = cx+(int32_t)x, py = cy+(int32_t)y;
-            if (px<0||py<0||px>=(int32_t)screen_w||py>=(int32_t)screen_h) continue;
+            int32_t px = cx + (int32_t)x, py = cy + (int32_t)y;
+            if (px < 0 || py < 0 || px >= (int32_t)screen_w || py >= (int32_t)screen_h) continue;
             uint8_t v = cursor_bitmap[y][x];
-            if (v==1) fb_put_pixel((uint32_t)px,(uint32_t)py, COLOR_BLACK);
-            else if (v==2) fb_put_pixel((uint32_t)px,(uint32_t)py, COLOR_WHITE);
+            if (v == 1) fb_put_pixel((uint32_t)px, (uint32_t)py, COLOR_BLACK);
+            else if (v == 2) fb_put_pixel((uint32_t)px, (uint32_t)py, COLOR_WHITE);
         }
 }
 
@@ -219,7 +244,8 @@ void desktop_init(void)
     draw_background();
     draw_taskbar();
     wm_init();
-    last_cx = -1; last_cy = -1;
+    last_cx = -1;
+    last_cy = -1;
     last_sec_rtc = 0xFF;
     prev_buttons = 0;
     start_menu_visible = false;
@@ -233,19 +259,22 @@ void desktop_apply_config(void)
     wm_set_dirty();
 }
 
-bool desktop_start_menu_open(void) { return start_menu_visible; }
+bool desktop_start_menu_open(void)
+{
+    return start_menu_visible;
+}
 
 int desktop_start_menu_click(int32_t mx, int32_t my)
 {
     uint32_t smx = 4;
     uint32_t smy = screen_h - TASKBAR_HEIGHT - START_MENU_H;
-    if (mx<(int32_t)smx||mx>=(int32_t)(smx+START_MENU_W)) return -1;
-    if (my<(int32_t)smy||my>=(int32_t)(smy+START_MENU_H)) return -1;
+    if (mx < (int32_t)smx || mx >= (int32_t)(smx + START_MENU_W)) return -1;
+    if (my < (int32_t)smy || my >= (int32_t)(smy + START_MENU_H)) return -1;
     int32_t ry = my - (int32_t)smy;
-    if (ry>=28 && ry<52) return 0;
-    if (ry>=56 && ry<80) return 1;
-    if (ry>=84 && ry<108) return 2;
-    if (ry>=112 && ry<136) return 3;
+    if (ry >= 28 && ry < 52) return 0;
+    if (ry >= 56 && ry < 80) return 1;
+    if (ry >= 84 && ry < 108) return 2;
+    if (ry >= 112 && ry < 136) return 3;
     return -1;
 }
 
@@ -261,7 +290,7 @@ void desktop_update(void)
 
     if (left_pressed) {
         uint32_t ty = screen_h - TASKBAR_HEIGHT;
-        if (ms.x>=4 && ms.x<84 && ms.y>=(int32_t)ty+4 && ms.y<(int32_t)ty+28) {
+        if (ms.x >= 4 && ms.x < 84 && ms.y >= (int32_t)ty + 4 && ms.y < (int32_t)ty + 28) {
             start_menu_visible = !start_menu_visible;
             wm_set_dirty();
         } else if (start_menu_visible) {
@@ -282,14 +311,17 @@ void desktop_update(void)
         wm_clear_dirty();
         cursor_save_bg(ms.x, ms.y);
         cursor_draw(ms.x, ms.y);
-        last_cx = ms.x; last_cy = ms.y;
+        last_cx = ms.x;
+        last_cy = ms.y;
     } else if (mouse_moved) {
         cursor_restore_bg(last_cx, last_cy);
         cursor_save_bg(ms.x, ms.y);
         cursor_draw(ms.x, ms.y);
-        last_cx = ms.x; last_cy = ms.y;
+        last_cx = ms.x;
+        last_cy = ms.y;
     } else {
-        rtc_time_t t; rtc_read(&t);
+        rtc_time_t t;
+        rtc_read(&t);
         if (t.second != last_sec_rtc) {
             last_sec_rtc = t.second;
             cursor_restore_bg(last_cx, last_cy);
