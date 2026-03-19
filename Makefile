@@ -14,7 +14,7 @@ ASFLAGS := -f elf32
 CFLAGS  := $(CFLAGS_ARCH) -std=gnu99 -ffreestanding -O2 \
            -Wall -Wextra -Werror \
            -fno-stack-protector -fno-pie -fno-pic \
-           -I. -Iinclude -Ikernel -Icpu -Idrivers -Imemory -Ilib -Igui -Iapps
+           -I. -Iinclude -Ikernel -Icpu -Idrivers -Imemory -Ilib -Igui -Iapps -Ifs
 
 LINK_FLAGS := $(CFLAGS_ARCH) -T linker.ld -ffreestanding -O2 -nostdlib \
               -no-pie -static \
@@ -45,7 +45,8 @@ C_SOURCES   := kernel/kernel.c \
                gui/desktop.c \
                gui/window.c \
                gui/widget.c \
-               apps/terminal.c
+               apps/terminal.c \
+               fs/ramfs.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
 C_OBJECTS   := $(C_SOURCES:.c=.o)
@@ -58,54 +59,42 @@ ISO_DIR    := iso
 .PHONY: all clean run debug verify
 
 all: $(ISO_FILE)
-	@echo ""
-	@echo "========================================"
-	@echo "  WintakOS Milestone 6 derlendi!"
-	@echo "  ISO: $(ISO_FILE)"
-	@echo "========================================"
+	@echo "  WintakOS Milestone 7 derlendi! ISO: $(ISO_FILE)"
 
 boot/boot.o: boot/boot.asm
-	@echo "  [ASM]  $<"
 	@$(AS) $(ASFLAGS) $< -o $@
 
 cpu/%.o: cpu/%.asm
-	@echo "  [ASM]  $<"
 	@$(AS) $(ASFLAGS) $< -o $@
 
 kernel/%.o: kernel/%.c
-	@echo "  [CC]   $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 cpu/%.o: cpu/%.c
-	@echo "  [CC]   $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 drivers/%.o: drivers/%.c
-	@echo "  [CC]   $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 memory/%.o: memory/%.c
-	@echo "  [CC]   $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 lib/%.o: lib/%.c
-	@echo "  [CC]   $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 gui/%.o: gui/%.c
-	@echo "  [CC]   $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 apps/%.o: apps/%.c
-	@echo "  [CC]   $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+fs/%.o: fs/%.c
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 $(KERNEL_BIN): $(ALL_OBJECTS)
-	@echo "  [LINK] $@"
 	@$(CC) $(LINK_FLAGS) -o $@ $(ALL_OBJECTS) -lgcc
 
 $(ISO_FILE): $(KERNEL_BIN)
-	@echo "  [ISO]  $@"
 	@mkdir -p $(ISO_DIR)/boot/grub
 	@cp $(KERNEL_BIN) $(ISO_DIR)/boot/
 	@cp boot/grub.cfg $(ISO_DIR)/boot/grub/
@@ -113,16 +102,14 @@ $(ISO_FILE): $(KERNEL_BIN)
 
 verify: $(KERNEL_BIN)
 	@file $(KERNEL_BIN)
-	@readelf -r $(KERNEL_BIN) 2>/dev/null || echo "Relocation yok"
-	@grub-file --is-x86-multiboot2 $(KERNEL_BIN) && echo "Multiboot2 OK" || echo "Multiboot2 FAIL"
+	@grub-file --is-x86-multiboot2 $(KERNEL_BIN) && echo "Multiboot2 OK" || echo "FAIL"
 
 run: $(ISO_FILE)
-	@$(QEMU) -cdrom $(ISO_FILE) -m 128M
+	@$(QEMU) -cdrom $(ISO_FILE) -m 512M
 
 debug: $(ISO_FILE)
-	@$(QEMU) -cdrom $(ISO_FILE) -m 128M -s -S
+	@$(QEMU) -cdrom $(ISO_FILE) -m 512M -s -S
 
 clean:
 	@rm -f $(ALL_OBJECTS) $(KERNEL_BIN) $(ISO_FILE)
 	@rm -rf $(ISO_DIR)
-	@echo "Temizlendi."
