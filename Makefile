@@ -14,7 +14,7 @@ ASFLAGS := -f elf32
 CFLAGS  := $(CFLAGS_ARCH) -std=gnu99 -ffreestanding -O2 \
            -Wall -Wextra -Werror \
            -fno-stack-protector -fno-pie -fno-pic \
-           -I. -Iinclude -Ikernel -Icpu -Idrivers -Imemory -Ilib -Igui
+           -I. -Iinclude -Ikernel -Icpu -Idrivers -Imemory -Ilib -Igui -Iapps
 
 LINK_FLAGS := $(CFLAGS_ARCH) -T linker.ld -ffreestanding -O2 -nostdlib \
               -no-pie -static \
@@ -44,7 +44,8 @@ C_SOURCES   := kernel/kernel.c \
                lib/string.c \
                gui/desktop.c \
                gui/window.c \
-               gui/widget.c
+               gui/widget.c \
+               apps/terminal.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
 C_OBJECTS   := $(C_SOURCES:.c=.o)
@@ -59,7 +60,7 @@ ISO_DIR    := iso
 all: $(ISO_FILE)
 	@echo ""
 	@echo "========================================"
-	@echo "  WintakOS Milestone 5 derlendi!"
+	@echo "  WintakOS Milestone 6 derlendi!"
 	@echo "  ISO: $(ISO_FILE)"
 	@echo "========================================"
 
@@ -92,6 +93,10 @@ lib/%.o: lib/%.c
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 gui/%.o: gui/%.c
+	@echo "  [CC]   $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+apps/%.o: apps/%.c
 	@echo "  [CC]   $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
