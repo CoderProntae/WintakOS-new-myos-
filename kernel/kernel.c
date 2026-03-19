@@ -22,9 +22,47 @@
 extern uint32_t kernel_end;
 #define DEFAULT_MEMORY_KB  (128 * 1024)
 
+/* Pencere pointer'lari (icerik cizimi icin) */
+static window_t* win_welcome = NULL;
+static window_t* win_sysinfo = NULL;
+
+/* Pencere iceriklerini ciz — dirty olunca cagirilir */
+static void draw_window_contents(void)
+{
+    if (win_welcome && (win_welcome->flags & WIN_FLAG_VISIBLE)) {
+        widget_draw_label(win_welcome, 16, 16,
+            "WintakOS v0.6.0", RGB(30, 30, 120));
+        widget_draw_label(win_welcome, 16, 40,
+            "Milestone 5: GUI Framework", RGB(80, 80, 80));
+        widget_draw_label(win_welcome, 16, 72,
+            "Mouse ile pencereleri", RGB(30, 30, 30));
+        widget_draw_label(win_welcome, 16, 92,
+            "surukleyebilirsiniz.", RGB(30, 30, 30));
+        widget_draw_label(win_welcome, 16, 120,
+            "X ile pencereyi kapatin.", RGB(30, 30, 30));
+        widget_draw_button(win_welcome, 16, 158, 120, 28,
+            "Tamam", RGB(50, 100, 180), COLOR_WHITE);
+    }
+
+    if (win_sysinfo && (win_sysinfo->flags & WIN_FLAG_VISIBLE)) {
+        widget_draw_label(win_sysinfo, 16, 16,
+            "CPU: i386 Protected Mode", RGB(30, 80, 30));
+        widget_draw_label(win_sysinfo, 16, 40,
+            "RAM: 128 MB", RGB(30, 30, 30));
+        widget_draw_label(win_sysinfo, 16, 64,
+            "Video: 800x600x32 VESA", RGB(30, 30, 30));
+        widget_draw_label(win_sysinfo, 16, 88,
+            "Klavye: PS/2 Turkce Q", RGB(30, 30, 30));
+        widget_draw_label(win_sysinfo, 16, 112,
+            "Mouse: PS/2", RGB(30, 30, 30));
+        widget_draw_label(win_sysinfo, 16, 144,
+            "Heap: 64 KB", RGB(80, 80, 80));
+    }
+}
+
 void kernel_main(uint32_t magic, void* mbi_ptr)
 {
-    /* Temel altyapi */
+    /* Core systems */
     gdt_init();
     idt_init();
     pic_init();
@@ -38,14 +76,11 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     }
 
     if (!graphics_mode) {
-        /* Fallback: VGA text mode */
         vga_init();
         vga_font_install_turkish();
-        vga_puts("WintakOS: Grafik modu bulunamadi. VGA text modunda.\n");
-
+        vga_puts("WintakOS: Grafik modu bulunamadi.\n");
         keyboard_init();
         __asm__ volatile("sti");
-
         while (1) {
             uint8_t c = keyboard_getchar();
             if (c) vga_putchar(c);
@@ -53,57 +88,34 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
         }
     }
 
-    /* Bellek */
+    /* Memory */
     pmm_init(DEFAULT_MEMORY_KB, (uint32_t)&kernel_end);
     heap_init();
 
-    /* Mouse */
+    /* Input */
     framebuffer_t* fb_info = fb_get_info();
     mouse_init(fb_info->width, fb_info->height);
-
-    /* Klavye */
     keyboard_init();
 
-    /* Masaustu */
+    /* Desktop */
     desktop_init();
+    desktop_set_content_drawer(draw_window_contents);
 
-    /* Demo pencereleri */
-    window_t* win1 = wm_create_window(100, 80, 320, 200, "Hosgeldiniz", RGB(240, 240, 245));
-    window_t* win2 = wm_create_window(300, 160, 280, 180, "Sistem Bilgisi", RGB(235, 245, 235));
+    /* Create demo windows */
+    win_welcome = wm_create_window(80, 60, 340, 200,
+        "Hosgeldiniz", RGB(240, 240, 250));
+    win_sysinfo = wm_create_window(280, 140, 300, 180,
+        "Sistem Bilgisi", RGB(235, 250, 235));
 
-    /* Ilk cizim */
-    desktop_draw();
+    /* Initial draw */
+    wm_set_dirty();
 
-    if (win1) {
-        widget_draw_label(win1, 16, 16, "WintakOS v0.6.0", RGB(30, 30, 30));
-        widget_draw_label(win1, 16, 40, "Milestone 5: GUI Framework", RGB(80, 80, 80));
-        widget_draw_label(win1, 16, 72, "Mouse ile pencereleri", RGB(30, 30, 30));
-        widget_draw_label(win1, 16, 92, "surukleyebilirsiniz.", RGB(30, 30, 30));
-        widget_draw_button(win1, 16, 150, 120, 30, "Tamam", RGB(50, 100, 180), COLOR_WHITE);
-    }
-
-    if (win2) {
-        widget_draw_label(win2, 16, 16, "CPU: i386 Protected Mode", RGB(30, 30, 30));
-        widget_draw_label(win2, 16, 36, "RAM: 128 MB", RGB(30, 30, 30));
-        widget_draw_label(win2, 16, 56, "Video: 800x600x32", RGB(30, 30, 30));
-        widget_draw_label(win2, 16, 76, "Klavye: Turkce Q", RGB(30, 30, 30));
-        widget_draw_label(win2, 16, 96, "Mouse: PS/2", RGB(30, 30, 30));
-    }
-
-    /* Interruptlari ac */
+    /* Enable interrupts */
     __asm__ volatile("sti");
 
-    /* Ana dongu */
-    uint32_t frame_counter = 0;
-
+    /* Main loop */
     while (1) {
-        frame_counter++;
-
-        /* Her 2 tick'te bir guncelle (~50 fps) */
-        if (frame_counter % 2 == 0) {
-            desktop_update();
-        }
-
+        desktop_update();
         __asm__ volatile("hlt");
     }
 }
