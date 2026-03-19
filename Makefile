@@ -46,6 +46,7 @@ C_SOURCES   := kernel/kernel.c \
                gui/window.c \
                gui/widget.c \
                apps/terminal.c \
+               apps/setup.c \
                fs/ramfs.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
@@ -59,7 +60,7 @@ ISO_DIR    := iso
 .PHONY: all clean run debug verify
 
 all: $(ISO_FILE)
-	@echo "  WintakOS Milestone 7 derlendi! ISO: $(ISO_FILE)"
+	@echo "  WintakOS Milestone 8 derlendi! ISO: $(ISO_FILE)"
 
 boot/boot.o: boot/boot.asm
 	@$(AS) $(ASFLAGS) $< -o $@
