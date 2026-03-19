@@ -9,6 +9,7 @@
 #include "../memory/heap.h"
 #include "../fs/ramfs.h"
 #include "../lib/string.h"
+#include "../drivers/keyboard.h"
 
 static void term_draw(window_t* win);
 static void term_execute(terminal_t* term);
