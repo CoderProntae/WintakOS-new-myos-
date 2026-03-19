@@ -9,18 +9,16 @@
 #define KBD_STATUS_PORT  0x64
 #define KBD_BUFFER_SIZE  256
 
-static unsigned char kbd_buffer[KBD_BUFFER_SIZE];
+static uint8_t kbd_buffer[KBD_BUFFER_SIZE];
 static volatile uint32_t kbd_read_pos  = 0;
 static volatile uint32_t kbd_write_pos = 0;
 
 static volatile key_event_t last_event;
 static volatile bool        event_ready = false;
 static key_modifiers_t modifiers = {0, 0, 0, 0, 0};
-
-/* Extended scancode durumu (0xE0 prefix) */
 static volatile bool extended_scancode = false;
 
-static void kbd_buffer_put(unsigned char c)
+static void kbd_buffer_put(uint8_t c)
 {
     uint32_t next = (kbd_write_pos + 1) % KBD_BUFFER_SIZE;
     if (next != kbd_read_pos) {
@@ -29,7 +27,7 @@ static void kbd_buffer_put(unsigned char c)
     }
 }
 
-static bool is_letter(char c)
+static bool is_letter(uint8_t c)
 {
     if (c >= 'a' && c <= 'z') return true;
     if (c == CHAR_TR_DOTLESS_I) return true;
@@ -68,7 +66,6 @@ static uint8_t scancode_to_keycode(uint8_t sc)
     }
 }
 
-/* Extended scancode (0xE0 prefix) → ozel tus kodu */
 static uint8_t extended_to_keycode(uint8_t sc)
 {
     switch (sc) {
@@ -82,9 +79,9 @@ static uint8_t extended_to_keycode(uint8_t sc)
         case 0x51: return KEY_PAGEDOWN;
         case 0x52: return KEY_INSERT;
         case 0x53: return KEY_DELETE;
-        case 0x1C: return KEY_ENTER;     /* Numpad Enter */
-        case 0x1D: return KEY_LCTRL;     /* Right Ctrl */
-        case 0x38: return KEY_LALT;      /* Right Alt (AltGr) */
+        case 0x1C: return KEY_ENTER;
+        case 0x1D: return KEY_LCTRL;
+        case 0x38: return KEY_LALT;
         default:   return KEY_NONE;
     }
 }
@@ -95,7 +92,6 @@ static void keyboard_handler(registers_t* regs)
 
     uint8_t scancode = inb(KBD_DATA_PORT);
 
-    /* 0xE0 prefix: sonraki byte extended scancode */
     if (scancode == 0xE0) {
         extended_scancode = true;
         return;
@@ -111,26 +107,18 @@ static void keyboard_handler(registers_t* regs)
     ev.released = released ? 1 : 0;
 
     if (extended_scancode) {
-        /* Extended tus (ok tuslari, Home, End vb.) */
         extended_scancode = false;
-
         if (!released) {
             ev.keycode = extended_to_keycode(sc);
         }
-        /* Extended tuslar icin modifier guncelleme */
-        if (sc == 0x1D) {
-            modifiers.ctrl = released ? 0 : 1;
-        } else if (sc == 0x38) {
-            modifiers.alt = released ? 0 : 1;
-        }
-
+        if (sc == 0x1D) modifiers.ctrl = released ? 0 : 1;
+        else if (sc == 0x38) modifiers.alt = released ? 0 : 1;
         ev.mods = modifiers;
         last_event = ev;
         event_ready = true;
         return;
     }
 
-    /* Normal scancode */
     if (sc == 0x2A || sc == 0x36) {
         modifiers.shift = released ? 0 : 1;
         ev.keycode = (sc == 0x2A) ? KEY_LSHIFT : KEY_RSHIFT;
@@ -164,7 +152,7 @@ static void keyboard_handler(registers_t* regs)
             bool use_shift = modifiers.shift;
 
             if (modifiers.capslock) {
-                char normal = scancode_to_ascii[sc];
+                uint8_t normal = scancode_to_ascii[sc];
                 if (is_letter(normal)) {
                     use_shift = !use_shift;
                 }
@@ -202,12 +190,12 @@ void keyboard_init(void)
     pic_clear_mask(IRQ_KEYBOARD);
 }
 
-char keyboard_getchar(void)
+uint8_t keyboard_getchar(void)
 {
     if (kbd_read_pos == kbd_write_pos) return 0;
-    unsigned char c = kbd_buffer[kbd_read_pos];
+    uint8_t c = kbd_buffer[kbd_read_pos];
     kbd_read_pos = (kbd_read_pos + 1) % KBD_BUFFER_SIZE;
-    return (char)c;
+    return c;
 }
 
 bool keyboard_poll(key_event_t* event)
