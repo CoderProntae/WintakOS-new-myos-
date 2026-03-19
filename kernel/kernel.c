@@ -9,263 +9,99 @@
 #include "../drivers/vga_font.h"
 #include "../drivers/framebuffer.h"
 #include "../drivers/fbconsole.h"
+#include "../drivers/mouse.h"
 #include "../memory/pmm.h"
 #include "../memory/heap.h"
+#include "../gui/desktop.h"
+#include "../gui/window.h"
+#include "../gui/widget.h"
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
-#define WINTAKOS_VERSION "0.5.0"
+#define WINTAKOS_VERSION "0.6.0"
 
 extern uint32_t kernel_end;
 #define DEFAULT_MEMORY_KB  (128 * 1024)
 
-static bool graphics_mode = false;
-
-static void kputs(const char* s)
-{
-    if (graphics_mode) fbcon_puts(s);
-    else vga_puts(s);
-}
-
-static void kputchar(uint8_t c)
-{
-    if (graphics_mode) fbcon_putchar(c);
-    else vga_putchar(c);
-}
-
-static void kput_dec(uint32_t v)
-{
-    if (graphics_mode) fbcon_put_dec(v);
-    else vga_put_dec(v);
-}
-
-static void kput_hex(uint32_t v)
-{
-    if (graphics_mode) fbcon_put_hex(v);
-    else vga_put_hex(v);
-}
-
-static void kset_color_fb(uint32_t fg, uint32_t bg)
-{
-    if (graphics_mode) fbcon_set_color(fg, bg);
-}
-
-static void print_ok(const char* msg)
-{
-    if (graphics_mode) {
-        fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
-        fbcon_puts("  [");
-        fbcon_set_color(COLOR_GREEN, COLOR_BG_DEFAULT);
-        fbcon_puts(" OK ");
-        fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
-        fbcon_puts("] ");
-        fbcon_puts(msg);
-        fbcon_putchar('\n');
-    } else {
-        vga_set_color(VGA_WHITE, VGA_BLACK);
-        vga_puts("  [");
-        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-        vga_puts(" OK ");
-        vga_set_color(VGA_WHITE, VGA_BLACK);
-        vga_puts("] ");
-        vga_puts(msg);
-        vga_putchar('\n');
-    }
-}
-
-static void print_fail(const char* msg)
-{
-    if (graphics_mode) {
-        fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
-        fbcon_puts("  [");
-        fbcon_set_color(COLOR_RED, COLOR_BG_DEFAULT);
-        fbcon_puts("FAIL");
-        fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
-        fbcon_puts("] ");
-        fbcon_puts(msg);
-        fbcon_putchar('\n');
-    } else {
-        vga_set_color(VGA_WHITE, VGA_BLACK);
-        vga_puts("  [");
-        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
-        vga_puts("FAIL");
-        vga_set_color(VGA_WHITE, VGA_BLACK);
-        vga_puts("] ");
-        vga_puts(msg);
-        vga_putchar('\n');
-    }
-}
-
-static void print_info_dec(const char* label, uint32_t value, const char* unit)
-{
-    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
-    kputs("         ");
-    kputs(label);
-    kset_color_fb(COLOR_YELLOW, COLOR_BG_DEFAULT);
-    kput_dec(value);
-    kset_color_fb(COLOR_LIGHT_GREY, COLOR_BG_DEFAULT);
-    kputs(unit);
-    kputchar('\n');
-}
-
-static void print_info_hex(const char* label, uint32_t value)
-{
-    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
-    kputs("         ");
-    kputs(label);
-    kset_color_fb(COLOR_YELLOW, COLOR_BG_DEFAULT);
-    kput_hex(value);
-    kputchar('\n');
-}
-
-static void print_banner(void)
-{
-    kset_color_fb(COLOR_CYAN, COLOR_BG_DEFAULT);
-    kputs("\n");
-    kputs("  __        ___       _        _     ___  ____  \n");
-    kputs("  \\ \\      / (_)_ __ | |_ __ _| | __/ _ \\/ ___| \n");
-    kputs("   \\ \\ /\\ / /| | '_ \\| __/ _` | |/ / | | \\___ \\ \n");
-    kputs("    \\ V  V / | | | | | || (_| |   <| |_| |___) |\n");
-    kputs("     \\_/\\_/  |_|_| |_|\\__\\__,_|_|\\_\\\\___/|____/ \n\n");
-
-    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
-    kputs("  Surum: ");
-    kset_color_fb(COLOR_YELLOW, COLOR_BG_DEFAULT);
-    kputs(WINTAKOS_VERSION);
-    kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
-    kputs("  (Milestone 4 - VESA Grafik Modu)\n");
-    kputs("  =========================================================\n\n");
-}
-
 void kernel_main(uint32_t magic, void* mbi_ptr)
 {
+    /* Temel altyapi */
     gdt_init();
     idt_init();
     pic_init();
     isr_init();
     pit_init(PIT_FREQUENCY);
 
+    /* Framebuffer */
+    bool graphics_mode = false;
     if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && fb_init(mbi_ptr)) {
         graphics_mode = true;
-        fbcon_init();
-    } else {
-        graphics_mode = false;
+    }
+
+    if (!graphics_mode) {
+        /* Fallback: VGA text mode */
         vga_init();
         vga_font_install_turkish();
+        vga_puts("WintakOS: Grafik modu bulunamadi. VGA text modunda.\n");
+
+        keyboard_init();
+        __asm__ volatile("sti");
+
+        while (1) {
+            uint8_t c = keyboard_getchar();
+            if (c) vga_putchar(c);
+            __asm__ volatile("hlt");
+        }
     }
 
-    print_banner();
-
-    if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
-        print_fail("Multiboot2 dogrulama BASARISIZ!");
-        return;
-    }
-    print_ok("Multiboot2 dogrulama basarili");
-    print_ok("GDT kuruldu");
-    print_ok("IDT kuruldu (256 giris)");
-    print_ok("PIC yapilandirildi");
-    print_ok("ISR/IRQ handler'lari yuklendi");
-    print_ok("PIT zamanlayici aktif (100 Hz)");
-
-    keyboard_init();
-    print_ok("PS/2 klavye aktif (Turkce Q)");
-
-    if (graphics_mode) {
-        framebuffer_t* info = fb_get_info();
-        print_ok("VESA framebuffer aktif");
-        print_info_dec("Cozunurluk:  ", info->width, "");
-        kputs("         x");
-        kput_dec(info->height);
-        kputs("x");
-        kput_dec((uint32_t)info->bpp);
-        kputchar('\n');
-        print_info_dec("Pitch:       ", info->pitch, " byte/satir");
-        print_info_hex("FB Adres:    ", (uint32_t)(uintptr_t)info->address);
-    } else {
-        print_ok("VGA Text Mode (grafik modu bulunamadi)");
-    }
-
+    /* Bellek */
     pmm_init(DEFAULT_MEMORY_KB, (uint32_t)&kernel_end);
-    print_ok("PMM baslatildi");
-    print_info_dec("Toplam RAM:  ", DEFAULT_MEMORY_KB / 1024, " MB");
-    print_info_dec("Bos sayfa:   ", pmm_get_free_pages(), "");
-
     heap_init();
-    print_ok("Kernel heap baslatildi (64 KB)");
 
-    __asm__ volatile("sti");
-    print_ok("Kesme sistemi aktif (STI)");
+    /* Mouse */
+    framebuffer_t* fb_info = fb_get_info();
+    mouse_init(fb_info->width, fb_info->height);
 
-    kputs("\n");
-    kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
-    kputs("  ---------------------------------------------------------\n");
-    kset_color_fb(COLOR_GREEN, COLOR_BG_DEFAULT);
-    kputs("  Milestone 4 tamamlandi.\n\n");
+    /* Klavye */
+    keyboard_init();
 
-    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
-    kputs("  Sure: ");
+    /* Masaustu */
+    desktop_init();
 
-    uint32_t timer_row, timer_col;
-    if (graphics_mode) {
-        timer_row = fbcon_get_row();
-        timer_col = fbcon_get_col();
-    } else {
-        timer_row = vga_get_row();
-        timer_col = vga_get_col();
+    /* Demo pencereleri */
+    window_t* win1 = wm_create_window(100, 80, 320, 200, "Hosgeldiniz", RGB(240, 240, 245));
+    window_t* win2 = wm_create_window(300, 160, 280, 180, "Sistem Bilgisi", RGB(235, 245, 235));
+
+    /* Ilk cizim */
+    desktop_draw();
+
+    if (win1) {
+        widget_draw_label(win1, 16, 16, "WintakOS v0.6.0", RGB(30, 30, 30));
+        widget_draw_label(win1, 16, 40, "Milestone 5: GUI Framework", RGB(80, 80, 80));
+        widget_draw_label(win1, 16, 72, "Mouse ile pencereleri", RGB(30, 30, 30));
+        widget_draw_label(win1, 16, 92, "surukleyebilirsiniz.", RGB(30, 30, 30));
+        widget_draw_button(win1, 16, 150, 120, 30, "Tamam", RGB(50, 100, 180), COLOR_WHITE);
     }
 
-    kputs("\n\n");
-    kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
-    kputs("  Sonraki: Milestone 5 - GUI Framework\n");
-    kputs("  ---------------------------------------------------------\n");
-    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
-    kputs("  Klavye testi:\n\n");
-    kset_color_fb(COLOR_GREEN, COLOR_BG_DEFAULT);
-    kputs("  WintakOS> ");
-    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
+    if (win2) {
+        widget_draw_label(win2, 16, 16, "CPU: i386 Protected Mode", RGB(30, 30, 30));
+        widget_draw_label(win2, 16, 36, "RAM: 128 MB", RGB(30, 30, 30));
+        widget_draw_label(win2, 16, 56, "Video: 800x600x32", RGB(30, 30, 30));
+        widget_draw_label(win2, 16, 76, "Klavye: Turkce Q", RGB(30, 30, 30));
+        widget_draw_label(win2, 16, 96, "Mouse: PS/2", RGB(30, 30, 30));
+    }
 
-    uint32_t last_second = 0;
+    /* Interruptlari ac */
+    __asm__ volatile("sti");
+
+    /* Ana dongu */
+    uint32_t frame_counter = 0;
 
     while (1) {
-        uint32_t ticks   = pit_get_ticks();
-        uint32_t seconds = ticks / PIT_FREQUENCY;
+        frame_counter++;
 
-        if (seconds != last_second) {
-            last_second = seconds;
-
-            uint32_t cur_row, cur_col;
-            if (graphics_mode) {
-                cur_row = fbcon_get_row();
-                cur_col = fbcon_get_col();
-                fbcon_set_cursor(timer_row, timer_col);
-                fbcon_set_color(COLOR_YELLOW, COLOR_BG_DEFAULT);
-                fbcon_put_dec(seconds);
-                fbcon_puts("s    ");
-                fbcon_set_cursor(cur_row, cur_col);
-                fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
-            } else {
-                cur_row = vga_get_row();
-                cur_col = vga_get_col();
-                vga_set_cursor((uint8_t)timer_row, (uint8_t)timer_col);
-                vga_set_color(VGA_YELLOW, VGA_BLACK);
-                vga_put_dec(seconds);
-                vga_puts("s    ");
-                vga_set_cursor((uint8_t)cur_row, (uint8_t)cur_col);
-                vga_set_color(VGA_WHITE, VGA_BLACK);
-            }
-        }
-
-        uint8_t c = keyboard_getchar();
-        if (c) {
-            if (c == '\n') {
-                kputchar('\n');
-                kset_color_fb(COLOR_GREEN, COLOR_BG_DEFAULT);
-                kputs("  WintakOS> ");
-                kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
-            } else if (c == '\b') {
-                kputchar('\b');
-            } else {
-                kputchar(c);
-            }
+        /* Her 2 tick'te bir guncelle (~50 fps) */
+        if (frame_counter % 2 == 0) {
+            desktop_update();
         }
 
         __asm__ volatile("hlt");
