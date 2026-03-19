@@ -1,8 +1,3 @@
-/*============================================================================
- * WintakOS - kernel.c
- * Milestone 2: PS/2 Klavye + Turkce Q Duzeni
- *==========================================================================*/
-
 #include "../include/types.h"
 #include "../kernel/vga.h"
 #include "../cpu/gdt.h"
@@ -63,6 +58,10 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     (void)mbi_ptr;
 
     vga_init();
+
+    /* Font gliflerini VGA'dan ONCE yukle */
+    vga_font_install_turkish();
+
     print_banner();
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
@@ -71,7 +70,6 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     }
     print_ok("Multiboot2 dogrulama basarili");
 
-    /* Milestone 0-1 */
     gdt_init();
     print_ok("GDT kuruldu");
 
@@ -87,30 +85,25 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     pit_init(PIT_FREQUENCY);
     print_ok("PIT zamanlayici aktif (100 Hz)");
 
-    /* Milestone 2 */
-    vga_font_install_turkish();
-    print_ok("Turkce font glifleri yuklendi (ı İ ş Ş ğ Ğ)");
-    
     keyboard_init();
     print_ok("PS/2 klavye surucusu aktif (Turkce Q)");
+
+    print_ok("Turkce font glifleri yuklendi");
 
     __asm__ volatile("sti");
     print_ok("Kesme sistemi aktif (STI)");
 
-    /* Durum */
     vga_puts("\n");
     vga_set_color(VGA_DARK_GREY, VGA_BLACK);
     vga_puts("  ---------------------------------------------------------\n");
     vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
     vga_puts("  Milestone 2 tamamlandi.\n\n");
 
-    /* Calisma suresi */
     vga_set_color(VGA_WHITE, VGA_BLACK);
     vga_puts("  Sure: ");
     uint8_t timer_row = vga_get_row();
     uint8_t timer_col = vga_get_col();
 
-    /* Terminal satiri */
     vga_puts("\n\n");
     vga_set_color(VGA_DARK_GREY, VGA_BLACK);
     vga_puts("  ---------------------------------------------------------\n");
@@ -121,16 +114,9 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     vga_puts("  WintakOS> ");
     vga_set_color(VGA_WHITE, VGA_BLACK);
 
-    uint8_t prompt_row = vga_get_row();
-    uint8_t prompt_col = vga_get_col();
-    (void)prompt_row;
-    (void)prompt_col;
-
-    /* Ana dongu */
     uint32_t last_second = 0;
 
     while (1) {
-        /* Sure guncelle */
         uint32_t ticks   = pit_get_ticks();
         uint32_t seconds = ticks / PIT_FREQUENCY;
 
@@ -148,8 +134,7 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
             vga_set_color(VGA_WHITE, VGA_BLACK);
         }
 
-        /* Klavye okuma */
-        char c = keyboard_getchar();
+        uint8_t c = keyboard_getchar();
         if (c) {
             if (c == '\n') {
                 vga_putchar('\n');
