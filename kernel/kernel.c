@@ -7,142 +7,147 @@
 #include "../cpu/pit.h"
 #include "../drivers/keyboard.h"
 #include "../drivers/vga_font.h"
+#include "../drivers/framebuffer.h"
+#include "../drivers/fbconsole.h"
 #include "../memory/pmm.h"
 #include "../memory/heap.h"
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
-#define WINTAKOS_VERSION "0.4.0"
+#define WINTAKOS_VERSION "0.5.0"
 
-/* Linker script'ten kernel bitiş adresi */
 extern uint32_t kernel_end;
-
-/* Varsayılan bellek: 128MB (Multiboot2 parse ileride eklenecek) */
 #define DEFAULT_MEMORY_KB  (128 * 1024)
 
-static void print_banner(void)
-{
-    vga_set_color(VGA_LIGHT_CYAN, VGA_BLACK);
-    vga_puts("  __        ___       _        _     ___  ____  \n");
-    vga_puts("  \\ \\      / (_)_ __ | |_ __ _| | __/ _ \\/ ___| \n");
-    vga_puts("   \\ \\ /\\ / /| | '_ \\| __/ _` | |/ / | | \\___ \\ \n");
-    vga_puts("    \\ V  V / | | | | | || (_| |   <| |_| |___) |\n");
-    vga_puts("     \\_/\\_/  |_|_| |_|\\__\\__,_|_|\\_\\\\___/|____/ \n\n");
+/* Grafik modu aktif mi? */
+static bool graphics_mode = false;
 
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("  Surum: ");
-    vga_set_color(VGA_YELLOW, VGA_BLACK);
-    vga_puts(WINTAKOS_VERSION);
-    vga_set_color(VGA_DARK_GREY, VGA_BLACK);
-    vga_puts("  (Milestone 3 - Bellek Yonetimi)\n");
-    vga_puts("  =========================================================\n\n");
+/*--- Genel print fonksiyonlari: hem VGA hem FB destekler ---*/
+static void kputs(const char* s)
+{
+    if (graphics_mode) fbcon_puts(s);
+    else vga_puts(s);
+}
+
+static void kputchar(uint8_t c)
+{
+    if (graphics_mode) fbcon_putchar(c);
+    else vga_putchar(c);
+}
+
+static void kput_hex(uint32_t v)
+{
+    if (graphics_mode) fbcon_put_hex(v);
+    else vga_put_hex(v);
+}
+
+static void kput_dec(uint32_t v)
+{
+    if (graphics_mode) fbcon_put_dec(v);
+    else vga_put_dec(v);
+}
+
+static void kset_color_fb(uint32_t fg, uint32_t bg)
+{
+    if (graphics_mode) fbcon_set_color(fg, bg);
 }
 
 static void print_ok(const char* msg)
 {
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("  [");
-    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-    vga_puts(" OK ");
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("] ");
-    vga_puts(msg);
-    vga_putchar('\n');
+    if (graphics_mode) {
+        fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
+        fbcon_puts("  [");
+        fbcon_set_color(COLOR_GREEN, COLOR_BG_DEFAULT);
+        fbcon_puts(" OK ");
+        fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
+        fbcon_puts("] ");
+        fbcon_puts(msg);
+        fbcon_putchar('\n');
+    } else {
+        vga_set_color(VGA_WHITE, VGA_BLACK);
+        vga_puts("  [");
+        vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
+        vga_puts(" OK ");
+        vga_set_color(VGA_WHITE, VGA_BLACK);
+        vga_puts("] ");
+        vga_puts(msg);
+        vga_putchar('\n');
+    }
 }
 
 static void print_fail(const char* msg)
 {
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("  [");
-    vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
-    vga_puts("FAIL");
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("] ");
-    vga_puts(msg);
-    vga_putchar('\n');
+    if (graphics_mode) {
+        fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
+        fbcon_puts("  [");
+        fbcon_set_color(COLOR_RED, COLOR_BG_DEFAULT);
+        fbcon_puts("FAIL");
+        fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
+        fbcon_puts("] ");
+        fbcon_puts(msg);
+        fbcon_putchar('\n');
+    } else {
+        vga_set_color(VGA_WHITE, VGA_BLACK);
+        vga_puts("  [");
+        vga_set_color(VGA_LIGHT_RED, VGA_BLACK);
+        vga_puts("FAIL");
+        vga_set_color(VGA_WHITE, VGA_BLACK);
+        vga_puts("] ");
+        vga_puts(msg);
+        vga_putchar('\n');
+    }
 }
 
 static void print_info(const char* label, uint32_t value, const char* unit)
 {
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("         ");
-    vga_puts(label);
-    vga_set_color(VGA_YELLOW, VGA_BLACK);
-    vga_put_dec(value);
-    vga_set_color(VGA_LIGHT_GREY, VGA_BLACK);
-    vga_puts(unit);
-    vga_putchar('\n');
+    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
+    kputs("         ");
+    kputs(label);
+    kset_color_fb(COLOR_YELLOW, COLOR_BG_DEFAULT);
+    kput_dec(value);
+    kset_color_fb(COLOR_LIGHT_GREY, COLOR_BG_DEFAULT);
+    kputs(unit);
+    kputchar('\n');
 }
 
-/* Basit bellek testi */
-static void memory_test(void)
+static void print_banner(void)
 {
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("\n  --- Bellek Testi ---\n");
+    kset_color_fb(COLOR_CYAN, COLOR_BG_DEFAULT);
+    kputs("\n");
+    kputs("  __        ___       _        _     ___  ____  \n");
+    kputs("  \\ \\      / (_)_ __ | |_ __ _| | __/ _ \\/ ___| \n");
+    kputs("   \\ \\ /\\ / /| | '_ \\| __/ _` | |/ / | | \\___ \\ \n");
+    kputs("    \\ V  V / | | | | | || (_| |   <| |_| |___) |\n");
+    kputs("     \\_/\\_/  |_|_| |_|\\__\\__,_|_|\\_\\\\___/|____/ \n\n");
 
-    /* Test 1: malloc/free */
-    uint32_t* ptr1 = (uint32_t*)kmalloc(64);
-    uint32_t* ptr2 = (uint32_t*)kmalloc(128);
-    uint32_t* ptr3 = (uint32_t*)kmalloc(256);
-
-    if (ptr1 && ptr2 && ptr3) {
-        /* Yazma testi */
-        ptr1[0] = 0xDEADBEEF;
-        ptr2[0] = 0xCAFEBABE;
-        ptr3[0] = 0x12345678;
-
-        /* Okuma dogrulama */
-        if (ptr1[0] == 0xDEADBEEF &&
-            ptr2[0] == 0xCAFEBABE &&
-            ptr3[0] == 0x12345678) {
-            print_ok("malloc/free: yazma-okuma basarili");
-        } else {
-            print_fail("malloc/free: veri bozuldu!");
-        }
-
-        print_info("ptr1 adresi: 0x", (uint32_t)(uintptr_t)ptr1, "");
-        print_info("ptr2 adresi: 0x", (uint32_t)(uintptr_t)ptr2, "");
-        print_info("ptr3 adresi: 0x", (uint32_t)(uintptr_t)ptr3, "");
-
-        /* Heap durumu (free oncesi) */
-        print_info("Heap kullanim: ", heap_get_used(), " byte");
-
-        /* Serbest birak */
-        kfree(ptr1);
-        kfree(ptr2);
-        kfree(ptr3);
-
-        /* Heap durumu (free sonrasi) */
-        print_info("Free sonrasi:  ", heap_get_used(), " byte");
-
-        if (heap_get_used() == 0) {
-            print_ok("malloc/free: tum bellek serbest birakildi");
-        }
-    } else {
-        print_fail("malloc BASARISIZ - bellek ayrilamadi!");
-    }
-
-    /* Test 2: PMM sayfa ayirma */
-    void* page1 = pmm_alloc_page();
-    void* page2 = pmm_alloc_page();
-
-    if (page1 && page2) {
-        print_ok("PMM sayfa ayirma basarili");
-        print_info("Sayfa 1: 0x", (uint32_t)(uintptr_t)page1, "");
-        print_info("Sayfa 2: 0x", (uint32_t)(uintptr_t)page2, "");
-        pmm_free_page(page1);
-        pmm_free_page(page2);
-        print_ok("PMM sayfa serbest birakma basarili");
-    } else {
-        print_fail("PMM sayfa ayirma BASARISIZ!");
-    }
+    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
+    kputs("  Surum: ");
+    kset_color_fb(COLOR_YELLOW, COLOR_BG_DEFAULT);
+    kputs(WINTAKOS_VERSION);
+    kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
+    kputs("  (Milestone 4 - VESA Grafik Modu)\n");
+    kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
+    kputs("  =========================================================\n\n");
 }
 
 void kernel_main(uint32_t magic, void* mbi_ptr)
 {
-    (void)mbi_ptr;
+    /* Oncelikle temel altyapiyi kur (grafik oncesi) */
+    gdt_init();
+    idt_init();
+    pic_init();
+    isr_init();
+    pit_init(PIT_FREQUENCY);
 
-    vga_init();
-    vga_font_install_turkish();
+    /* Framebuffer dene */
+    if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && fb_init(mbi_ptr)) {
+        graphics_mode = true;
+        fbcon_init();
+    } else {
+        graphics_mode = false;
+        vga_init();
+        vga_font_install_turkish();
+    }
+
     print_banner();
 
     if (magic != MULTIBOOT2_BOOTLOADER_MAGIC) {
@@ -151,67 +156,69 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     }
     print_ok("Multiboot2 dogrulama basarili");
 
-    /* Milestone 0-1 */
-    gdt_init();
     print_ok("GDT kuruldu");
-
-    idt_init();
     print_ok("IDT kuruldu (256 giris)");
-
-    pic_init();
     print_ok("PIC yapilandirildi");
-
-    isr_init();
     print_ok("ISR/IRQ handler'lari yuklendi");
-
-    pit_init(PIT_FREQUENCY);
     print_ok("PIT zamanlayici aktif (100 Hz)");
 
-    /* Milestone 2 */
     keyboard_init();
     print_ok("PS/2 klavye aktif (Turkce Q)");
-    print_ok("Turkce font glifleri yuklendi");
 
-    /* Milestone 3 */
+    if (graphics_mode) {
+        framebuffer_t* info = fb_get_info();
+        print_ok("VESA framebuffer aktif");
+        print_info("Cozunurluk:  ", info->width, "");
+        kputs("         x");
+        kput_dec(info->height);
+        kputs("x");
+        kput_dec((uint32_t)info->bpp);
+        kputchar('\n');
+        print_info("Pitch:       ", info->pitch, " byte/satir");
+        print_info("FB Adres:    0x", (uint32_t)(uintptr_t)info->address, "");
+    } else {
+        print_ok("VGA Text Mode (grafik modu bulunamadi)");
+    }
+
     pmm_init(DEFAULT_MEMORY_KB, (uint32_t)&kernel_end);
-    print_ok("PMM baslatildi (bitmap tabanli)");
-    print_info("Toplam RAM:     ", DEFAULT_MEMORY_KB / 1024, " MB");
-    print_info("Toplam sayfa:   ", pmm_get_total_pages(), "");
-    print_info("Bos sayfa:      ", pmm_get_free_pages(), "");
-    print_info("Kullanilan:     ", pmm_get_used_pages(), "");
+    print_ok("PMM baslatildi");
+    print_info("Toplam RAM:  ", DEFAULT_MEMORY_KB / 1024, " MB");
+    print_info("Bos sayfa:   ", pmm_get_free_pages(), "");
 
     heap_init();
     print_ok("Kernel heap baslatildi (64 KB)");
-    print_info("Heap toplam:    ", heap_get_free() + heap_get_used(), " byte");
-    print_info("Heap bos:       ", heap_get_free(), " byte");
 
     __asm__ volatile("sti");
     print_ok("Kesme sistemi aktif (STI)");
 
-    /* Bellek testi */
-    memory_test();
-
     /* Durum */
-    vga_puts("\n");
-    vga_set_color(VGA_DARK_GREY, VGA_BLACK);
-    vga_puts("  ---------------------------------------------------------\n");
-    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-    vga_puts("  Milestone 3 tamamlandi.\n\n");
+    kputs("\n");
+    kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
+    kputs("  ---------------------------------------------------------\n");
+    kset_color_fb(COLOR_GREEN, COLOR_BG_DEFAULT);
+    kputs("  Milestone 4 tamamlandi.\n\n");
 
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("  Sure: ");
-    uint8_t timer_row = vga_get_row();
-    uint8_t timer_col = vga_get_col();
+    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
+    kputs("  Sure: ");
 
-    vga_puts("\n\n");
-    vga_set_color(VGA_DARK_GREY, VGA_BLACK);
-    vga_puts("  Sonraki: Milestone 4 - VESA Grafik Modu\n");
-    vga_puts("  ---------------------------------------------------------\n");
-    vga_set_color(VGA_WHITE, VGA_BLACK);
-    vga_puts("  Klavye testi:\n\n");
-    vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-    vga_puts("  WintakOS> ");
-    vga_set_color(VGA_WHITE, VGA_BLACK);
+    uint32_t timer_row, timer_col;
+    if (graphics_mode) {
+        timer_row = fbcon_get_row();
+        timer_col = fbcon_get_col();
+    } else {
+        timer_row = vga_get_row();
+        timer_col = vga_get_col();
+    }
+
+    kputs("\n\n");
+    kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
+    kputs("  Sonraki: Milestone 5 - Font + UTF-8\n");
+    kputs("  ---------------------------------------------------------\n");
+    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
+    kputs("  Klavye testi:\n\n");
+    kset_color_fb(COLOR_GREEN, COLOR_BG_DEFAULT);
+    kputs("  WintakOS> ");
+    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
 
     uint32_t last_second = 0;
 
@@ -221,27 +228,40 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
 
         if (seconds != last_second) {
             last_second = seconds;
-            uint8_t cur_row = vga_get_row();
-            uint8_t cur_col = vga_get_col();
-            vga_set_cursor(timer_row, timer_col);
-            vga_set_color(VGA_YELLOW, VGA_BLACK);
-            vga_put_dec(seconds);
-            vga_puts("s    ");
-            vga_set_cursor(cur_row, cur_col);
-            vga_set_color(VGA_WHITE, VGA_BLACK);
+
+            uint32_t cur_row, cur_col;
+            if (graphics_mode) {
+                cur_row = fbcon_get_row();
+                cur_col = fbcon_get_col();
+                fbcon_set_cursor(timer_row, timer_col);
+                fbcon_set_color(COLOR_YELLOW, COLOR_BG_DEFAULT);
+                fbcon_put_dec(seconds);
+                fbcon_puts("s    ");
+                fbcon_set_cursor(cur_row, cur_col);
+                fbcon_set_color(COLOR_WHITE, COLOR_BG_DEFAULT);
+            } else {
+                cur_row = vga_get_row();
+                cur_col = vga_get_col();
+                vga_set_cursor((uint8_t)timer_row, (uint8_t)timer_col);
+                vga_set_color(VGA_YELLOW, VGA_BLACK);
+                vga_put_dec(seconds);
+                vga_puts("s    ");
+                vga_set_cursor((uint8_t)cur_row, (uint8_t)cur_col);
+                vga_set_color(VGA_WHITE, VGA_BLACK);
+            }
         }
 
         uint8_t c = keyboard_getchar();
         if (c) {
             if (c == '\n') {
-                vga_putchar('\n');
-                vga_set_color(VGA_LIGHT_GREEN, VGA_BLACK);
-                vga_puts("  WintakOS> ");
-                vga_set_color(VGA_WHITE, VGA_BLACK);
+                kputchar('\n');
+                kset_color_fb(COLOR_GREEN, COLOR_BG_DEFAULT);
+                kputs("  WintakOS> ");
+                kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
             } else if (c == '\b') {
-                vga_putchar('\b');
+                kputchar('\b');
             } else {
-                vga_putchar(c);
+                kputchar(c);
             }
         }
 
