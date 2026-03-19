@@ -3,7 +3,6 @@
 
 #include "../include/types.h"
 
-/* Ozel tus kodlari (ASCII disinda) */
 #define KEY_NONE        0
 #define KEY_ESCAPE      0x1B
 #define KEY_BACKSPACE   0x08
@@ -39,7 +38,6 @@
 #define KEY_NUMLOCK     0x9B
 #define KEY_SCROLLLOCK  0x9C
 
-/* Modifier durumlari */
 typedef struct {
     uint8_t shift    : 1;
     uint8_t ctrl     : 1;
@@ -48,9 +46,8 @@ typedef struct {
     uint8_t numlock  : 1;
 } key_modifiers_t;
 
-/* Klavye olayı */
 typedef struct {
-    unsigned char ascii;    /* Karakter (0 = ozel tus) */
+    uint8_t ascii;
     uint8_t keycode;
     uint8_t scancode;
     uint8_t released;
@@ -58,14 +55,8 @@ typedef struct {
 } __attribute__((packed)) key_event_t;
 
 void keyboard_init(void);
-
-/* Karakter tamponundan oku (0 = bos) */
-char keyboard_getchar(void);
-
-/* Son tus olayini al */
+uint8_t keyboard_getchar(void);
 bool keyboard_poll(key_event_t* event);
-
-/* Modifier durumlarini al */
 key_modifiers_t keyboard_get_modifiers(void);
 
 #endif
