@@ -125,14 +125,11 @@ static void setup_click(window_t* win, int32_t rx, int32_t ry)
             break;
 
         case 2:
-            /* Tema secimi */
-        case 2:
-            if (ry >= 72 && ry < 92)  { config.theme = 0; wm_set_dirty(); }
-            if (ry >= 96 && ry < 116) { config.theme = 1; wm_set_dirty(); }
+            if (ry >= 72 && ry < 92)   { config.theme = 0; wm_set_dirty(); }
+            if (ry >= 96 && ry < 116)  { config.theme = 1; wm_set_dirty(); }
             if (ry >= 120 && ry < 140) { config.theme = 2; wm_set_dirty(); }
             if (ry >= 144 && ry < 164) { config.theme = 3; wm_set_dirty(); }
             if (ry >= 168 && ry < 188) { config.theme = 4; wm_set_dirty(); }
-            /* ... geri kalan aynı */
 
             if (widget_button_hit(win, 140, 200, 100, 30, rx, ry)) {
                 setup_step = 1;
@@ -142,7 +139,6 @@ static void setup_click(window_t* win, int32_t rx, int32_t ry)
                 setup_step = 3;
                 config.completed = true;
 
-                /* Ayarlari RAMFS'e kaydet */
                 char cfg_data[128];
                 uint32_t p = 0;
                 const char* k1 = "username=";
@@ -206,7 +202,7 @@ bool setup_run(void)
                         if (buf[j]=='t' && buf[j+1]=='h' && buf[j+2]=='e' &&
                             buf[j+3]=='m' && buf[j+4]=='e' && buf[j+5]=='=') {
                             config.theme = (uint8_t)(buf[j+6] - '0');
-                            if (config.theme > 2) config.theme = 0;
+                            if (config.theme > 4) config.theme = 0;
                         }
                     }
 
