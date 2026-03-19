@@ -18,10 +18,8 @@
 extern uint32_t kernel_end;
 #define DEFAULT_MEMORY_KB  (128 * 1024)
 
-/* Grafik modu aktif mi? */
 static bool graphics_mode = false;
 
-/*--- Genel print fonksiyonlari: hem VGA hem FB destekler ---*/
 static void kputs(const char* s)
 {
     if (graphics_mode) fbcon_puts(s);
@@ -34,16 +32,16 @@ static void kputchar(uint8_t c)
     else vga_putchar(c);
 }
 
-static void kput_hex(uint32_t v)
-{
-    if (graphics_mode) fbcon_put_hex(v);
-    else vga_put_hex(v);
-}
-
 static void kput_dec(uint32_t v)
 {
     if (graphics_mode) fbcon_put_dec(v);
     else vga_put_dec(v);
+}
+
+static void kput_hex(uint32_t v)
+{
+    if (graphics_mode) fbcon_put_hex(v);
+    else vga_put_hex(v);
 }
 
 static void kset_color_fb(uint32_t fg, uint32_t bg)
@@ -97,7 +95,7 @@ static void print_fail(const char* msg)
     }
 }
 
-static void print_info(const char* label, uint32_t value, const char* unit)
+static void print_info_dec(const char* label, uint32_t value, const char* unit)
 {
     kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
     kputs("         ");
@@ -106,6 +104,16 @@ static void print_info(const char* label, uint32_t value, const char* unit)
     kput_dec(value);
     kset_color_fb(COLOR_LIGHT_GREY, COLOR_BG_DEFAULT);
     kputs(unit);
+    kputchar('\n');
+}
+
+static void print_info_hex(const char* label, uint32_t value)
+{
+    kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
+    kputs("         ");
+    kputs(label);
+    kset_color_fb(COLOR_YELLOW, COLOR_BG_DEFAULT);
+    kput_hex(value);
     kputchar('\n');
 }
 
@@ -125,20 +133,17 @@ static void print_banner(void)
     kputs(WINTAKOS_VERSION);
     kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
     kputs("  (Milestone 4 - VESA Grafik Modu)\n");
-    kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
     kputs("  =========================================================\n\n");
 }
 
 void kernel_main(uint32_t magic, void* mbi_ptr)
 {
-    /* Oncelikle temel altyapiyi kur (grafik oncesi) */
     gdt_init();
     idt_init();
     pic_init();
     isr_init();
     pit_init(PIT_FREQUENCY);
 
-    /* Framebuffer dene */
     if (magic == MULTIBOOT2_BOOTLOADER_MAGIC && fb_init(mbi_ptr)) {
         graphics_mode = true;
         fbcon_init();
@@ -155,7 +160,6 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
         return;
     }
     print_ok("Multiboot2 dogrulama basarili");
-
     print_ok("GDT kuruldu");
     print_ok("IDT kuruldu (256 giris)");
     print_ok("PIC yapilandirildi");
@@ -168,22 +172,22 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     if (graphics_mode) {
         framebuffer_t* info = fb_get_info();
         print_ok("VESA framebuffer aktif");
-        print_info("Cozunurluk:  ", info->width, "");
+        print_info_dec("Cozunurluk:  ", info->width, "");
         kputs("         x");
         kput_dec(info->height);
         kputs("x");
         kput_dec((uint32_t)info->bpp);
         kputchar('\n');
-        print_info("Pitch:       ", info->pitch, " byte/satir");
-        print_info("FB Adres:    0x", (uint32_t)(uintptr_t)info->address, "");
+        print_info_dec("Pitch:       ", info->pitch, " byte/satir");
+        print_info_hex("FB Adres:    ", (uint32_t)(uintptr_t)info->address);
     } else {
         print_ok("VGA Text Mode (grafik modu bulunamadi)");
     }
 
     pmm_init(DEFAULT_MEMORY_KB, (uint32_t)&kernel_end);
     print_ok("PMM baslatildi");
-    print_info("Toplam RAM:  ", DEFAULT_MEMORY_KB / 1024, " MB");
-    print_info("Bos sayfa:   ", pmm_get_free_pages(), "");
+    print_info_dec("Toplam RAM:  ", DEFAULT_MEMORY_KB / 1024, " MB");
+    print_info_dec("Bos sayfa:   ", pmm_get_free_pages(), "");
 
     heap_init();
     print_ok("Kernel heap baslatildi (64 KB)");
@@ -191,7 +195,6 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     __asm__ volatile("sti");
     print_ok("Kesme sistemi aktif (STI)");
 
-    /* Durum */
     kputs("\n");
     kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
     kputs("  ---------------------------------------------------------\n");
@@ -212,7 +215,7 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
 
     kputs("\n\n");
     kset_color_fb(COLOR_DARK_GREY, COLOR_BG_DEFAULT);
-    kputs("  Sonraki: Milestone 5 - Font + UTF-8\n");
+    kputs("  Sonraki: Milestone 5 - GUI Framework\n");
     kputs("  ---------------------------------------------------------\n");
     kset_color_fb(COLOR_WHITE, COLOR_BG_DEFAULT);
     kputs("  Klavye testi:\n\n");
