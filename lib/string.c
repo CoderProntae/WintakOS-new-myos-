@@ -1,8 +1,3 @@
-/*============================================================================
- * WintakOS - string.c
- * Temel Bellek/String İşlem Fonksiyonları - Uygulama
- *==========================================================================*/
-
 #include "string.h"
 
 void* memset(void* dest, int val, size_t count)
@@ -29,9 +24,7 @@ int memcmp(const void* a, const void* b, size_t count)
     const uint8_t* p1 = (const uint8_t*)a;
     const uint8_t* p2 = (const uint8_t*)b;
     for (size_t i = 0; i < count; i++) {
-        if (p1[i] != p2[i]) {
-            return (int)p1[i] - (int)p2[i];
-        }
+        if (p1[i] != p2[i]) return p1[i] - p2[i];
     }
     return 0;
 }
@@ -39,8 +32,6 @@ int memcmp(const void* a, const void* b, size_t count)
 size_t strlen(const char* str)
 {
     size_t len = 0;
-    while (str[len]) {
-        len++;
-    }
+    while (str[len]) len++;
     return len;
 }
