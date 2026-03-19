@@ -33,6 +33,7 @@ C_SOURCES   := kernel/kernel.c \
                cpu/isr.c \
                cpu/pic.c \
                cpu/pit.c \
+               cpu/rtc.c \
                drivers/keyboard.c \
                drivers/vga_font.c \
                drivers/framebuffer.c \
