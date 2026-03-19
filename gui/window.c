@@ -2,6 +2,7 @@
 #include "../drivers/framebuffer.h"
 #include "../drivers/fbconsole.h"
 #include "../drivers/font8x16.h"
+#include "../drivers/mouse.h"
 #include "../lib/string.h"
 
 static window_t windows[MAX_WINDOWS];
