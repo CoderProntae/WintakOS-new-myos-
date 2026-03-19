@@ -5,9 +5,10 @@
 
 #define TASKBAR_HEIGHT  32
 
+typedef void (*content_draw_fn)(void);
+
 void desktop_init(void);
-void desktop_draw(void);
-void desktop_draw_taskbar(uint32_t ticks, uint32_t frequency);
+void desktop_set_content_drawer(content_draw_fn fn);
 void desktop_update(void);
 
 #endif
