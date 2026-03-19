@@ -12,6 +12,7 @@
 #define COLOR_BLUE        RGB(0, 100, 255)
 #define COLOR_YELLOW      RGB(255, 255, 0)
 #define COLOR_CYAN        RGB(0, 220, 220)
+#define COLOR_MAGENTA     RGB(200, 0, 200)
 #define COLOR_DARK_GREY   RGB(80, 80, 80)
 #define COLOR_LIGHT_GREY  RGB(180, 180, 180)
 #define COLOR_ORANGE      RGB(255, 140, 0)
@@ -32,7 +33,6 @@ void     fb_put_pixel(uint32_t x, uint32_t y, uint32_t color);
 uint32_t fb_get_pixel(uint32_t x, uint32_t y);
 void     fb_fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color);
 void     fb_clear(uint32_t color);
-void     fb_swap(void);
 
 framebuffer_t* fb_get_info(void);
 
