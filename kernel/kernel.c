@@ -61,7 +61,6 @@ static calculator_t* main_calc = NULL;
 static notepad_t* main_notepad = NULL;
 
 /* Hangi uygulama aktif: 0=terminal, 1=calc, 2=notepad */
-static uint8_t active_app = 0;
 
 void kernel_main(uint32_t magic, void* mbi_ptr)
 {
