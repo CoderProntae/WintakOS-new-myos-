@@ -4,42 +4,27 @@
 #include "vga_font.h"
 
 /*============================================================================
- * Turkce Q Klavye Haritasi
+ * Turkce Q Klavye - Scan Code Set 1
  *
- * CP437 Turkce karakterler:
- *   ü = 0x81    Ü = 0x9A
- *   ö = 0x94    Ö = 0x99
- *   ç = 0x87    Ç = 0x80
+ * CP437 karakterler:  u-umlaut=0x81  U-umlaut=0x9A
+ *                     o-umlaut=0x94  O-umlaut=0x99
+ *                     c-cedilla=0x87 C-cedilla=0x80
  *
- * Ozel font glifleri:
- *   ı = 0x01    İ = 0x02
- *   ş = 0x03    Ş = 0x04
- *   ğ = 0x05    Ğ = 0x06
- *
- * Turkce Q fiziksel pozisyonlar:
- *   0x17 (US i)  → ı / I (shift)
- *   0x28 (US ')  → i / İ (shift)
- *   0x27 (US ;)  → ş / Ş (shift)
- *   0x1A (US [)  → ğ / Ğ (shift)
- *   0x1B (US ])  → ü / Ü (shift)
- *   0x33 (US ,)  → ö / Ö (shift)
- *   0x34 (US .)  → ç / Ç (shift)
- *   0x35 (US /)  → . / : (shift)
- *   0x2B (US \)  → , / ; (shift)
- *   0x29 (US `)  → " / é (shift, simdilik ")
- *   0x0C (US -)  → * / ? (shift)
- *   0x0D (US =)  → - / _ (shift)
+ * Ozel font:          dotless-i=0x01  dotted-I=0x02
+ *                     s-cedilla=0x03  S-cedilla=0x04
+ *                     g-breve=0x05    G-breve=0x06
  *==========================================================================*/
 
-static const char scancode_to_ascii[128] = {
+/* UNSIGNED CHAR — 0x80+ degerler icin zorunlu */
+static const unsigned char scancode_to_ascii[128] = {
 /*           0     1     2     3     4     5     6     7  */
 /* 0x00 */   0,    0,   '1', '2', '3', '4', '5', '6',
 /* 0x08 */  '7', '8', '9', '0', '*', '-',  0,    0,
 /* 0x10 */  'q', 'w', 'e', 'r', 't', 'y', 'u', 0x01,
-/* 0x18 */  'o', 'p', 0x05,0x81,  0,    0,  'a', 's',
+/* 0x18 */  'o', 'p', 0x05, 0x81, 0,    0,  'a', 's',
 /* 0x20 */  'd', 'f', 'g', 'h', 'j', 'k', 'l', 0x03,
 /* 0x28 */  'i', '"',  0,  ',', 'z', 'x', 'c', 'v',
-/* 0x30 */  'b', 'n', 'm',0x94,0x87, '.',  0,  '*',
+/* 0x30 */  'b', 'n', 'm', 0x94, 0x87, '.',  0,  '*',
 /* 0x38 */   0,  ' ',  0,    0,    0,    0,    0,    0,
 /* 0x40 */   0,    0,    0,    0,    0,    0,    0,  '7',
 /* 0x48 */  '8', '9', '-', '4', '5', '6', '+', '1',
@@ -51,15 +36,15 @@ static const char scancode_to_ascii[128] = {
 /* 0x78 */   0,    0,    0,    0,    0,    0,    0,    0,
 };
 
-static const char scancode_to_ascii_shift[128] = {
+static const unsigned char scancode_to_ascii_shift[128] = {
 /*           0     1     2     3     4     5     6     7  */
 /* 0x00 */   0,    0,   '!','\'', '^', '+', '%', '&',
 /* 0x08 */  '/', '(', ')', '=', '?', '_',  0,    0,
 /* 0x10 */  'Q', 'W', 'E', 'R', 'T', 'Y', 'U', 'I',
-/* 0x18 */  'O', 'P', 0x06,'\x9A', 0,   0,  'A', 'S',
+/* 0x18 */  'O', 'P', 0x06, 0x9A, 0,    0,  'A', 'S',
 /* 0x20 */  'D', 'F', 'G', 'H', 'J', 'K', 'L', 0x04,
-/* 0x28 */ 0x02, '"',  0,  ';', 'Z', 'X', 'C', 'V',
-/* 0x30 */  'B', 'N', 'M','\x99','\x80',':',0, '*',
+/* 0x28 */  0x02, '"',  0,  ';', 'Z', 'X', 'C', 'V',
+/* 0x30 */  'B', 'N', 'M', 0x99, 0x80, ':',  0,  '*',
 /* 0x38 */   0,  ' ',  0,    0,    0,    0,    0,    0,
 /* 0x40 */   0,    0,    0,    0,    0,    0,    0,  '7',
 /* 0x48 */  '8', '9', '-', '4', '5', '6', '+', '1',
