@@ -1,11 +1,7 @@
-/*============================================================================
- * WintakOS - fbconsole.c
- * Framebuffer Uzerinde Konsol
- *==========================================================================*/
-
 #include "fbconsole.h"
 #include "framebuffer.h"
 #include "font8x16.h"
+#include "../lib/string.h"
 
 static uint32_t con_row = 0;
 static uint32_t con_col = 0;
@@ -48,10 +44,10 @@ static void fbcon_draw_char(uint32_t row, uint32_t col, uint8_t c, uint32_t fg, 
     uint32_t py = row * FBCON_CHAR_H;
 
     const uint8_t* glyph;
-    if (c < 128 || c <= 0x10) {
+    if (c <= 0x7F || c <= 0x10) {
         glyph = font8x16_data[c];
     } else {
-        glyph = font8x16_data[0]; /* bilinmeyen → bos */
+        glyph = font8x16_data[0];
     }
 
     for (uint32_t y = 0; y < FBCON_CHAR_H; y++) {
@@ -65,7 +61,28 @@ static void fbcon_draw_char(uint32_t row, uint32_t col, uint8_t c, uint32_t fg, 
 
 static void fbcon_scroll(void)
 {
-    fb_scroll(FBCON_CHAR_H, con_bg);
+    framebuffer_t* fb = fb_get_info();
+    if (!fb->available) return;
+
+    uint32_t line_pixels = FBCON_CHAR_H;
+    uint32_t pitch32 = fb->pitch / 4;
+
+    /* Bir karakter yuksekligi kadar yukari kaydir */
+    uint32_t copy_rows = fb->height - line_pixels;
+    for (uint32_t row = 0; row < copy_rows; row++) {
+        uint32_t dst = row * pitch32;
+        uint32_t src = (row + line_pixels) * pitch32;
+        memcpy(&fb->address[dst], &fb->address[src], fb->pitch);
+    }
+
+    /* Alt kismi temizle */
+    for (uint32_t row = copy_rows; row < fb->height; row++) {
+        uint32_t offset = row * pitch32;
+        for (uint32_t col = 0; col < fb->width; col++) {
+            fb->address[offset + col] = con_bg;
+        }
+    }
+
     con_row = con_max_rows - 1;
 }
 
