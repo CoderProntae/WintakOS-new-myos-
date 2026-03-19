@@ -47,6 +47,8 @@ C_SOURCES   := kernel/kernel.c \
                gui/widget.c \
                apps/terminal.c \
                apps/setup.c \
+               apps/calculator.c \
+               apps/notepad.c \
                fs/ramfs.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
