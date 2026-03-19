@@ -29,26 +29,40 @@ static uint32_t theme_btn;
 static void apply_theme(uint8_t theme)
 {
     switch (theme) {
-        case 1:
-            theme_bg_top = RGB(180, 200, 230);
-            theme_bg_bot = RGB(220, 230, 245);
-            theme_taskbar = RGB(220, 220, 230);
-            theme_taskbar_text = RGB(30, 30, 30);
-            theme_btn = RGB(100, 140, 200);
+        case 1: /* Acik */
+            theme_bg_top = RGB(200, 215, 240);
+            theme_bg_bot = RGB(230, 240, 250);
+            theme_taskbar = RGB(230, 230, 238);
+            theme_taskbar_text = RGB(30, 30, 40);
+            theme_btn = RGB(90, 130, 200);
             break;
-        case 2:
-            theme_bg_top = RGB(10, 40, 120);
-            theme_bg_bot = RGB(30, 80, 180);
-            theme_taskbar = RGB(10, 30, 80);
-            theme_taskbar_text = COLOR_WHITE;
-            theme_btn = RGB(20, 60, 140);
+        case 2: /* Okyanus */
+            theme_bg_top = RGB(5, 30, 80);
+            theme_bg_bot = RGB(10, 80, 140);
+            theme_taskbar = RGB(5, 20, 60);
+            theme_taskbar_text = RGB(180, 220, 255);
+            theme_btn = RGB(15, 60, 120);
             break;
-        default:
-            theme_bg_top = RGB(20, 30, 80);
-            theme_bg_bot = RGB(40, 60, 140);
-            theme_taskbar = RGB(25, 25, 40);
+        case 3: /* Orman */
+            theme_bg_top = RGB(15, 40, 20);
+            theme_bg_bot = RGB(30, 80, 40);
+            theme_taskbar = RGB(20, 30, 15);
+            theme_taskbar_text = RGB(200, 240, 200);
+            theme_btn = RGB(30, 80, 40);
+            break;
+        case 4: /* Gun Batimi */
+            theme_bg_top = RGB(40, 20, 60);
+            theme_bg_bot = RGB(180, 80, 40);
+            theme_taskbar = RGB(50, 20, 30);
+            theme_taskbar_text = RGB(255, 220, 180);
+            theme_btn = RGB(160, 60, 40);
+            break;
+        default: /* Koyu */
+            theme_bg_top = RGB(15, 20, 50);
+            theme_bg_bot = RGB(30, 50, 100);
+            theme_taskbar = RGB(20, 20, 35);
             theme_taskbar_text = COLOR_WHITE;
-            theme_btn = RGB(50, 90, 170);
+            theme_btn = RGB(45, 80, 160);
             break;
     }
 }
