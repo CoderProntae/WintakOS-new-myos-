@@ -1,5 +1,5 @@
 #=============================================================================
-# WintakOS - Makefile (Milestone 2)
+# WintakOS - Makefile (Milestone 3)
 #=============================================================================
 
 ifeq ($(shell which i686-elf-gcc 2>/dev/null),)
@@ -18,7 +18,7 @@ ASFLAGS := -f elf32
 CFLAGS  := $(CFLAGS_ARCH) -std=gnu99 -ffreestanding -O2 \
            -Wall -Wextra -Werror \
            -fno-stack-protector -fno-pie -fno-pic \
-           -I. -Iinclude -Ikernel -Icpu -Idrivers
+           -I. -Iinclude -Ikernel -Icpu -Idrivers -Imemory -Ilib
 
 LINK_FLAGS := $(CFLAGS_ARCH) -T linker.ld -ffreestanding -O2 -nostdlib \
               -no-pie -static \
@@ -38,7 +38,10 @@ C_SOURCES   := kernel/kernel.c \
                cpu/pic.c \
                cpu/pit.c \
                drivers/keyboard.c \
-               drivers/vga_font.c
+               drivers/vga_font.c \
+               memory/pmm.c \
+               memory/heap.c \
+               lib/string.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
 C_OBJECTS   := $(C_SOURCES:.c=.o)
@@ -53,7 +56,7 @@ ISO_DIR    := iso
 all: $(ISO_FILE)
 	@echo ""
 	@echo "========================================"
-	@echo "  WintakOS Milestone 2 derlendi!"
+	@echo "  WintakOS Milestone 3 derlendi!"
 	@echo "  ISO: $(ISO_FILE)"
 	@echo "========================================"
 
@@ -74,6 +77,14 @@ cpu/%.o: cpu/%.c
 	@$(CC) $(CFLAGS) -c $< -o $@
 
 drivers/%.o: drivers/%.c
+	@echo "  [CC]   $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+memory/%.o: memory/%.c
+	@echo "  [CC]   $<"
+	@$(CC) $(CFLAGS) -c $< -o $@
+
+lib/%.o: lib/%.c
 	@echo "  [CC]   $<"
 	@$(CC) $(CFLAGS) -c $< -o $@
 
