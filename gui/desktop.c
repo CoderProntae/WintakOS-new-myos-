@@ -2,15 +2,22 @@
 #include "window.h"
 #include "cursor.h"
 #include "../drivers/framebuffer.h"
-#include "../drivers/fbconsole.h"
 #include "../drivers/font8x16.h"
 #include "../drivers/mouse.h"
 #include "../cpu/pit.h"
+#include "../lib/string.h"
 
 static uint32_t screen_w = 800;
 static uint32_t screen_h = 600;
-static uint32_t cursor_save[CURSOR_W * CURSOR_H];
-static int32_t  last_cx = -1, last_cy = -1;
+
+static uint32_t cursor_save_buf[CURSOR_W * CURSOR_H];
+static int32_t  last_cx = -1;
+static int32_t  last_cy = -1;
+
+static uint32_t last_second = 0xFFFFFFFF;
+static uint8_t  prev_buttons = 0;
+
+static content_draw_fn draw_content = NULL;
 
 static void draw_char_px(uint32_t px, uint32_t py, uint8_t c, uint32_t fg, uint32_t bg)
 {
@@ -32,83 +39,39 @@ static void draw_string_px(uint32_t px, uint32_t py, const char* str, uint32_t f
     }
 }
 
-static void cursor_save_bg(int32_t cx, int32_t cy)
+static void draw_background(void)
 {
-    for (uint32_t y = 0; y < CURSOR_H; y++) {
-        for (uint32_t x = 0; x < CURSOR_W; x++) {
-            cursor_save[y * CURSOR_W + x] = fb_get_pixel((uint32_t)(cx + (int32_t)x),
-                                                          (uint32_t)(cy + (int32_t)y));
-        }
-    }
-}
+    uint32_t bg_h = screen_h - TASKBAR_HEIGHT;
 
-static void cursor_restore_bg(int32_t cx, int32_t cy)
-{
-    if (cx < 0 || cy < 0) return;
-    for (uint32_t y = 0; y < CURSOR_H; y++) {
-        for (uint32_t x = 0; x < CURSOR_W; x++) {
-            fb_put_pixel((uint32_t)(cx + (int32_t)x),
-                         (uint32_t)(cy + (int32_t)y),
-                         cursor_save[y * CURSOR_W + x]);
-        }
-    }
-}
-
-static void cursor_draw(int32_t cx, int32_t cy)
-{
-    for (uint32_t y = 0; y < CURSOR_H; y++) {
-        for (uint32_t x = 0; x < CURSOR_W; x++) {
-            uint8_t val = cursor_bitmap[y][x];
-            if (val == 1)
-                fb_put_pixel((uint32_t)(cx + (int32_t)x), (uint32_t)(cy + (int32_t)y), COLOR_BLACK);
-            else if (val == 2)
-                fb_put_pixel((uint32_t)(cx + (int32_t)x), (uint32_t)(cy + (int32_t)y), COLOR_WHITE);
-        }
-    }
-}
-
-void desktop_init(void)
-{
-    framebuffer_t* info = fb_get_info();
-    screen_w = info->width;
-    screen_h = info->height;
-
-    /* Masaustu arka plan — gradient */
-    for (uint32_t y = 0; y < screen_h - TASKBAR_HEIGHT; y++) {
-        uint8_t r = (uint8_t)(20 + y * 30 / screen_h);
-        uint8_t g = (uint8_t)(30 + y * 40 / screen_h);
-        uint8_t b = (uint8_t)(80 + y * 60 / screen_h);
+    for (uint32_t y = 0; y < bg_h; y++) {
+        uint8_t r = (uint8_t)(20 + y * 30 / bg_h);
+        uint8_t g = (uint8_t)(30 + y * 40 / bg_h);
+        uint8_t b = (uint8_t)(80 + y * 80 / bg_h);
         uint32_t color = RGB(r, g, b);
+
         for (uint32_t x = 0; x < screen_w; x++) {
             fb_put_pixel(x, y, color);
         }
     }
 
-    /* Masaustu yazisi */
-    draw_string_px(screen_w / 2 - 60, screen_h / 2 - 40, "WintakOS v0.6.0",
-                   RGB(255, 255, 255), RGB(30, 40, 90));
-
-    wm_init();
-    last_cx = -1;
-    last_cy = -1;
+    /* Center logo */
+    draw_string_px(screen_w / 2 - 60, 30, "WintakOS v0.6.0",
+                   RGB(200, 200, 255), RGB(22, 32, 84));
 }
 
-void desktop_draw_taskbar(uint32_t ticks, uint32_t frequency)
+static void draw_taskbar(void)
 {
     uint32_t ty = screen_h - TASKBAR_HEIGHT;
 
-    /* Taskbar arka plan */
     fb_fill_rect(0, ty, screen_w, TASKBAR_HEIGHT, RGB(25, 25, 40));
-
-    /* Ust cizgi */
     fb_fill_rect(0, ty, screen_w, 1, RGB(60, 60, 100));
 
-    /* WintakOS butonu */
+    /* Start button */
     fb_fill_rect(4, ty + 4, 80, TASKBAR_HEIGHT - 8, RGB(50, 90, 170));
     draw_string_px(12, ty + 8, "WintakOS", COLOR_WHITE, RGB(50, 90, 170));
 
-    /* Saat */
-    uint32_t total_sec = ticks / frequency;
+    /* Uptime clock */
+    uint32_t total_sec = pit_get_ticks() / PIT_FREQUENCY;
     uint32_t hours   = total_sec / 3600;
     uint32_t minutes = (total_sec % 3600) / 60;
     uint32_t seconds = total_sec % 60;
@@ -127,33 +90,109 @@ void desktop_draw_taskbar(uint32_t ticks, uint32_t frequency)
     draw_string_px(screen_w - 80, ty + 8, time_str, COLOR_WHITE, RGB(25, 25, 40));
 }
 
-void desktop_draw(void)
+static void cursor_save_bg(int32_t cx, int32_t cy)
 {
-    desktop_draw_taskbar(pit_get_ticks(), PIT_FREQUENCY);
-    wm_draw_all();
+    for (uint32_t y = 0; y < CURSOR_H; y++) {
+        for (uint32_t x = 0; x < CURSOR_W; x++) {
+            int32_t px = cx + (int32_t)x;
+            int32_t py = cy + (int32_t)y;
+            if (px >= 0 && py >= 0 && px < (int32_t)screen_w && py < (int32_t)screen_h) {
+                cursor_save_buf[y * CURSOR_W + x] = fb_get_pixel((uint32_t)px, (uint32_t)py);
+            }
+        }
+    }
+}
+
+static void cursor_restore_bg(int32_t cx, int32_t cy)
+{
+    if (cx < 0 && cy < 0) return;
+    for (uint32_t y = 0; y < CURSOR_H; y++) {
+        for (uint32_t x = 0; x < CURSOR_W; x++) {
+            int32_t px = cx + (int32_t)x;
+            int32_t py = cy + (int32_t)y;
+            if (px >= 0 && py >= 0 && px < (int32_t)screen_w && py < (int32_t)screen_h) {
+                fb_put_pixel((uint32_t)px, (uint32_t)py, cursor_save_buf[y * CURSOR_W + x]);
+            }
+        }
+    }
+}
+
+static void cursor_draw(int32_t cx, int32_t cy)
+{
+    for (uint32_t y = 0; y < CURSOR_H; y++) {
+        for (uint32_t x = 0; x < CURSOR_W; x++) {
+            int32_t px = cx + (int32_t)x;
+            int32_t py = cy + (int32_t)y;
+            if (px < 0 || py < 0 || px >= (int32_t)screen_w || py >= (int32_t)screen_h)
+                continue;
+
+            uint8_t val = cursor_bitmap[y][x];
+            if (val == 1)
+                fb_put_pixel((uint32_t)px, (uint32_t)py, COLOR_BLACK);
+            else if (val == 2)
+                fb_put_pixel((uint32_t)px, (uint32_t)py, COLOR_WHITE);
+        }
+    }
+}
+
+void desktop_init(void)
+{
+    framebuffer_t* info = fb_get_info();
+    screen_w = info->width;
+    screen_h = info->height;
+
+    draw_background();
+    draw_taskbar();
+
+    wm_init();
+    last_cx = -1;
+    last_cy = -1;
+    last_second = 0xFFFFFFFF;
+    prev_buttons = 0;
+}
+
+void desktop_set_content_drawer(content_draw_fn fn)
+{
+    draw_content = fn;
 }
 
 void desktop_update(void)
 {
     mouse_state_t ms = mouse_get_state();
 
-    /* Eski imleci geri yukle */
+    /* 1. Restore old cursor */
     cursor_restore_bg(last_cx, last_cy);
 
-    /* Mouse olaylarini isle */
+    /* 2. Handle mouse input */
+    bool clicked = (ms.buttons & MOUSE_BTN_LEFT) && !(prev_buttons & MOUSE_BTN_LEFT);
+    (void)clicked;
+
     wm_handle_mouse(ms.x, ms.y, ms.buttons);
+    prev_buttons = ms.buttons;
 
-    /* Taskbar guncelle */
-    desktop_draw_taskbar(pit_get_ticks(), PIT_FREQUENCY);
+    /* 3. Full redraw if something changed */
+    if (wm_is_dirty()) {
+        draw_background();
+        wm_draw_all();
 
-    /* Pencereleri ciz */
-    wm_draw_all();
+        if (draw_content) {
+            draw_content();
+        }
 
-    /* Yeni imleç konumunu kaydet ve ciz */
+        draw_taskbar();
+        wm_clear_dirty();
+    } else {
+        /* 4. Only update taskbar clock every second */
+        uint32_t now = pit_get_ticks() / PIT_FREQUENCY;
+        if (now != last_second) {
+            last_second = now;
+            draw_taskbar();
+        }
+    }
+
+    /* 5. Save + draw cursor */
     cursor_save_bg(ms.x, ms.y);
     cursor_draw(ms.x, ms.y);
     last_cx = ms.x;
     last_cy = ms.y;
-
-    mouse_clear_moved();
 }
