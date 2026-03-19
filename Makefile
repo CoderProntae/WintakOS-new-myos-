@@ -1,7 +1,3 @@
-#=============================================================================
-# WintakOS - Makefile (Milestone 3)
-#=============================================================================
-
 ifeq ($(shell which i686-elf-gcc 2>/dev/null),)
     CC           := gcc
     CFLAGS_ARCH  := -m32
@@ -39,6 +35,8 @@ C_SOURCES   := kernel/kernel.c \
                cpu/pit.c \
                drivers/keyboard.c \
                drivers/vga_font.c \
+               drivers/framebuffer.c \
+               drivers/fbconsole.c \
                memory/pmm.c \
                memory/heap.c \
                lib/string.c
@@ -56,7 +54,7 @@ ISO_DIR    := iso
 all: $(ISO_FILE)
 	@echo ""
 	@echo "========================================"
-	@echo "  WintakOS Milestone 3 derlendi!"
+	@echo "  WintakOS Milestone 4 derlendi!"
 	@echo "  ISO: $(ISO_FILE)"
 	@echo "========================================"
 
