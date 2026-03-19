@@ -113,19 +113,7 @@ static void draw_background(void)
 }
 
 /* Yardimci: gradient'ta belirli y'deki arka plan rengi */
-static uint32_t bg_color_at_y(uint32_t y)
-{
-    uint32_t bg_h = screen_h - TASKBAR_HEIGHT;
-    if (y >= bg_h) return theme_taskbar;
-    uint32_t ratio = y * 255 / bg_h;
-    uint8_t r = (uint8_t)(((theme_bg_top >> 16) & 0xFF) * (255 - ratio) / 255 +
-                           ((theme_bg_bot >> 16) & 0xFF) * ratio / 255);
-    uint8_t g = (uint8_t)(((theme_bg_top >> 8) & 0xFF) * (255 - ratio) / 255 +
-                           ((theme_bg_bot >> 8) & 0xFF) * ratio / 255);
-    uint8_t b = (uint8_t)((theme_bg_top & 0xFF) * (255 - ratio) / 255 +
-                           (theme_bg_bot & 0xFF) * ratio / 255);
-    return RGB(r, g, b);
-}
+
 
 static void draw_taskbar(void)
 {
