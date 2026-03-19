@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Milestone 3 - Derle ve Test Et
+    name: Milestone 4 - Derle ve Test Et
     runs-on: ubuntu-latest
 
     steps:
@@ -27,11 +27,6 @@ jobs:
             xorriso \
             mtools \
             qemu-system-x86
-
-      - name: Arac versiyonlari
-        run: |
-          gcc --version | head -1
-          nasm --version
 
       - name: Kernel derle
         run: make all
@@ -53,13 +48,13 @@ jobs:
       - name: ISO artifact yukle
         uses: actions/upload-artifact@v4
         with:
-          name: wintakos-iso-m3
+          name: wintakos-iso-m4
           path: wintakos.iso
           retention-days: 30
 
       - name: Kernel binary artifact yukle
         uses: actions/upload-artifact@v4
         with:
-          name: wintakos-kernel-m3
+          name: wintakos-kernel-m4
           path: wintakos.bin
           retention-days: 30
