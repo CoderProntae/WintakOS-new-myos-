@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Milestone 4 - Derle ve Test Et
+    name: Milestone 5 - Derle ve Test Et
     runs-on: ubuntu-latest
 
     steps:
@@ -48,13 +48,13 @@ jobs:
       - name: ISO artifact yukle
         uses: actions/upload-artifact@v4
         with:
-          name: wintakos-iso-m4
+          name: wintakos-iso-m5
           path: wintakos.iso
           retention-days: 30
 
       - name: Kernel binary artifact yukle
         uses: actions/upload-artifact@v4
         with:
-          name: wintakos-kernel-m4
+          name: wintakos-kernel-m5
           path: wintakos.bin
           retention-days: 30
