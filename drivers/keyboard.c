@@ -30,13 +30,31 @@ static void kbd_buffer_put(uint8_t c)
 static bool is_letter(uint8_t c)
 {
     if (c >= 'a' && c <= 'z') return true;
-    if (c == CHAR_TR_DOTLESS_I)  return true;
-    if (c == CHAR_TR_S_CEDILLA)  return true;
-    if (c == CHAR_TR_G_BREVE)    return true;
-    if (c == CHAR_TR_U_UMLAUT)   return true;
-    if (c == CHAR_TR_O_UMLAUT)   return true;
-    if (c == CHAR_TR_C_CEDILLA)  return true;
+    if (c == CHAR_TR_DOTLESS_I || c == CHAR_TR_S_CEDILLA ||
+        c == CHAR_TR_G_BREVE || c == CHAR_TR_U_UMLAUT ||
+        c == CHAR_TR_O_UMLAUT || c == CHAR_TR_C_CEDILLA) return true;
     return false;
+}
+
+static void kbd_wait_write(void)
+{
+    int timeout = 100000;
+    while (timeout-- > 0) {
+        if (!(inb(KBD_STATUS_PORT) & 0x02)) return;
+    }
+}
+
+void keyboard_set_leds(bool scroll, bool num, bool caps)
+{
+    uint8_t leds = 0;
+    if (scroll) leds |= 0x01;
+    if (num)    leds |= 0x02;
+    if (caps)   leds |= 0x04;
+
+    kbd_wait_write();
+    outb(KBD_DATA_PORT, 0xED);
+    kbd_wait_write();
+    outb(KBD_DATA_PORT, leds);
 }
 
 static uint8_t scancode_to_keycode(uint8_t sc)
@@ -92,28 +110,23 @@ static uint8_t extended_to_keycode(uint8_t sc)
 static void keyboard_handler(registers_t* regs)
 {
     (void)regs;
-
     uint8_t scancode = inb(KBD_DATA_PORT);
 
-    if (scancode == 0xE0) {
-        extended_scancode = true;
-        return;
-    }
+    if (scancode == 0xE0) { extended_scancode = true; return; }
+    if (scancode == 0xFA) return; /* ACK — LED komutuna yanit */
 
     uint8_t released = scancode & 0x80;
-    uint8_t sc       = scancode & 0x7F;
+    uint8_t sc = scancode & 0x7F;
 
     key_event_t ev;
-    ev.ascii    = 0;
-    ev.keycode  = KEY_NONE;
+    ev.ascii = 0;
+    ev.keycode = KEY_NONE;
     ev.scancode = scancode;
     ev.released = released ? 1 : 0;
 
     if (extended_scancode) {
         extended_scancode = false;
-        if (!released) {
-            ev.keycode = extended_to_keycode(sc);
-        }
+        if (!released) ev.keycode = extended_to_keycode(sc);
         if (sc == 0x1D) modifiers.ctrl = released ? 0 : 1;
         else if (sc == 0x38) modifiers.alt = released ? 0 : 1;
         ev.mods = modifiers;
@@ -126,51 +139,35 @@ static void keyboard_handler(registers_t* regs)
         modifiers.shift = released ? 0 : 1;
         ev.keycode = (sc == 0x2A) ? KEY_LSHIFT : KEY_RSHIFT;
     }
-    else if (sc == 0x1D) {
-        modifiers.ctrl = released ? 0 : 1;
-        ev.keycode = KEY_LCTRL;
-    }
-    else if (sc == 0x38) {
-        modifiers.alt = released ? 0 : 1;
-        ev.keycode = KEY_LALT;
-    }
+    else if (sc == 0x1D) { modifiers.ctrl = released ? 0 : 1; ev.keycode = KEY_LCTRL; }
+    else if (sc == 0x38) { modifiers.alt = released ? 0 : 1; ev.keycode = KEY_LALT; }
     else if (sc == 0x3A && !released) {
         modifiers.capslock = !modifiers.capslock;
         ev.keycode = KEY_CAPSLOCK;
+        keyboard_set_leds(false, modifiers.numlock, modifiers.capslock);
     }
     else if (sc == 0x45 && !released) {
         modifiers.numlock = !modifiers.numlock;
         ev.keycode = KEY_NUMLOCK;
+        keyboard_set_leds(false, modifiers.numlock, modifiers.capslock);
     }
     else if (!released) {
         uint8_t kc = scancode_to_keycode(sc);
-
         if (kc != KEY_NONE) {
             ev.keycode = kc;
-            if (kc == KEY_ENTER)          ev.ascii = '\n';
+            if (kc == KEY_ENTER) ev.ascii = '\n';
             else if (kc == KEY_BACKSPACE) ev.ascii = '\b';
-            else if (kc == KEY_TAB)       ev.ascii = '\t';
+            else if (kc == KEY_TAB) ev.ascii = '\t';
         }
         else if (sc < 128) {
             bool use_shift = modifiers.shift;
-
             if (modifiers.capslock) {
                 uint8_t normal = scancode_to_ascii[sc];
-                if (is_letter(normal)) {
-                    use_shift = !use_shift;
-                }
+                if (is_letter(normal)) use_shift = !use_shift;
             }
-
-            if (use_shift) {
-                ev.ascii = scancode_to_ascii_shift[sc];
-            } else {
-                ev.ascii = scancode_to_ascii[sc];
-            }
+            ev.ascii = use_shift ? scancode_to_ascii_shift[sc] : scancode_to_ascii[sc];
         }
-
-        if (ev.ascii) {
-            kbd_buffer_put(ev.ascii);
-        }
+        if (ev.ascii) kbd_buffer_put(ev.ascii);
     }
 
     ev.mods = modifiers;
@@ -180,17 +177,12 @@ static void keyboard_handler(registers_t* regs)
 
 void keyboard_init(void)
 {
-    kbd_read_pos  = 0;
-    kbd_write_pos = 0;
-    event_ready   = false;
-    extended_scancode = false;
-
-    while (inb(KBD_STATUS_PORT) & 0x01) {
-        inb(KBD_DATA_PORT);
-    }
-
+    kbd_read_pos = 0; kbd_write_pos = 0;
+    event_ready = false; extended_scancode = false;
+    while (inb(KBD_STATUS_PORT) & 0x01) inb(KBD_DATA_PORT);
     irq_register_handler(IRQ_KEYBOARD, keyboard_handler);
     pic_clear_mask(IRQ_KEYBOARD);
+    keyboard_set_leds(false, false, false);
 }
 
 uint8_t keyboard_getchar(void)
@@ -209,7 +201,4 @@ bool keyboard_poll(key_event_t* event)
     return true;
 }
 
-key_modifiers_t keyboard_get_modifiers(void)
-{
-    return modifiers;
-}
+key_modifiers_t keyboard_get_modifiers(void) { return modifiers; }
