@@ -30,9 +30,12 @@ static void kbd_buffer_put(uint8_t c)
 static bool is_letter(uint8_t c)
 {
     if (c >= 'a' && c <= 'z') return true;
-    if (c == CHAR_TR_DOTLESS_I) return true;
-    if (c == CHAR_TR_S_CEDILLA) return true;
-    if (c == CHAR_TR_G_BREVE)   return true;
+    if (c == CHAR_TR_DOTLESS_I)  return true;
+    if (c == CHAR_TR_S_CEDILLA)  return true;
+    if (c == CHAR_TR_G_BREVE)    return true;
+    if (c == CHAR_TR_U_UMLAUT)   return true;
+    if (c == CHAR_TR_O_UMLAUT)   return true;
+    if (c == CHAR_TR_C_CEDILLA)  return true;
     return false;
 }
 
