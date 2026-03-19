@@ -53,12 +53,14 @@ static void setup_draw(window_t* win)
             }
             break;
 
-        case 2: /* Tema */
-            widget_draw_label(win, 20, 16,  "Tema Se\x0Fimi", title_c);
-            widget_draw_label(win, 20, 48,  "Masa\x07st\x07 temas\x01n\x01 se\x0Fin:", text_c);
-            widget_draw_radio(win, 30, 80,  "Koyu Tema (varsay\x01lan)", config.theme == 0, text_c);
-            widget_draw_radio(win, 30, 108, "A\x0F\x01k Tema", config.theme == 1, text_c);
-            widget_draw_radio(win, 30, 136, "Mavi Tema", config.theme == 2, text_c);
+        case 2:
+            widget_draw_label(win, 20, 16, "Tema Se\x0Fimi", title_c);
+            widget_draw_label(win, 20, 44, "Masa\x07st\x07 temas\x01n\x01 se\x0Fin:", text_c);
+            widget_draw_radio(win, 30, 72,  "Koyu (varsay\x01lan)", config.theme == 0, text_c);
+            widget_draw_radio(win, 30, 96,  "A\x0F\x01k", config.theme == 1, text_c);
+            widget_draw_radio(win, 30, 120, "Okyanus", config.theme == 2, text_c);
+            widget_draw_radio(win, 30, 144, "Orman", config.theme == 3, text_c);
+            widget_draw_radio(win, 30, 168, "G\x07n Bat\x01m\x01", config.theme == 4, text_c);
             widget_draw_button(win, 140, 200, 100, 30, "< Geri", RGB(120, 120, 130), COLOR_WHITE);
             widget_draw_button(win, 260, 200, 100, 30, "Bitir", RGB(40, 150, 40), COLOR_WHITE);
             break;
@@ -124,9 +126,13 @@ static void setup_click(window_t* win, int32_t rx, int32_t ry)
 
         case 2:
             /* Tema secimi */
-            if (ry >= 80 && ry < 100) { config.theme = 0; wm_set_dirty(); }
-            if (ry >= 108 && ry < 128) { config.theme = 1; wm_set_dirty(); }
-            if (ry >= 136 && ry < 156) { config.theme = 2; wm_set_dirty(); }
+        case 2:
+            if (ry >= 72 && ry < 92)  { config.theme = 0; wm_set_dirty(); }
+            if (ry >= 96 && ry < 116) { config.theme = 1; wm_set_dirty(); }
+            if (ry >= 120 && ry < 140) { config.theme = 2; wm_set_dirty(); }
+            if (ry >= 144 && ry < 164) { config.theme = 3; wm_set_dirty(); }
+            if (ry >= 168 && ry < 188) { config.theme = 4; wm_set_dirty(); }
+            /* ... geri kalan aynı */
 
             if (widget_button_hit(win, 140, 200, 100, 30, rx, ry)) {
                 setup_step = 1;
