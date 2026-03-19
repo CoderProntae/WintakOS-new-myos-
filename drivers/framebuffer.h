@@ -3,20 +3,8 @@
 
 #include "../include/types.h"
 
-/*============================================================================
- * Framebuffer - Piksel Tabanli Grafik
- *
- * 800x600x32 BGRX formati:
- *   Byte 0: Blue
- *   Byte 1: Green
- *   Byte 2: Red
- *   Byte 3: Reserved (0)
- *==========================================================================*/
-
-/* Renk olusturma makrosu */
 #define RGB(r, g, b) ((uint32_t)((r) << 16 | (g) << 8 | (b)))
 
-/* Hazir renkler */
 #define COLOR_BLACK       RGB(0, 0, 0)
 #define COLOR_WHITE       RGB(255, 255, 255)
 #define COLOR_RED         RGB(255, 0, 0)
@@ -24,7 +12,6 @@
 #define COLOR_BLUE        RGB(0, 100, 255)
 #define COLOR_YELLOW      RGB(255, 255, 0)
 #define COLOR_CYAN        RGB(0, 220, 220)
-#define COLOR_MAGENTA     RGB(200, 0, 200)
 #define COLOR_DARK_GREY   RGB(80, 80, 80)
 #define COLOR_LIGHT_GREY  RGB(180, 180, 180)
 #define COLOR_ORANGE      RGB(255, 140, 0)
@@ -32,12 +19,12 @@
 #define COLOR_BG_DEFAULT  RGB(30, 30, 50)
 
 typedef struct {
-    uint32_t* address;       /* Framebuffer baslangic adresi */
-    uint32_t  width;         /* Piksel cinsinden genislik */
-    uint32_t  height;        /* Piksel cinsinden yukseklik */
-    uint32_t  pitch;         /* Byte cinsinden satir uzunlugu */
-    uint8_t   bpp;           /* Bit per pixel (32) */
-    bool      available;     /* Framebuffer kullanilabilir mi? */
+    uint32_t* address;
+    uint32_t  width;
+    uint32_t  height;
+    uint32_t  pitch;
+    uint8_t   bpp;
+    bool      available;
 } framebuffer_t;
 
 bool     fb_init(void* mbi_ptr);
@@ -45,7 +32,7 @@ void     fb_put_pixel(uint32_t x, uint32_t y, uint32_t color);
 uint32_t fb_get_pixel(uint32_t x, uint32_t y);
 void     fb_fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color);
 void     fb_clear(uint32_t color);
-void     fb_scroll(uint32_t lines, uint32_t bg_color);
+void     fb_swap(void);
 
 framebuffer_t* fb_get_info(void);
 
