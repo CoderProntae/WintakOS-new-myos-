@@ -3,6 +3,7 @@
 
 #include "../include/types.h"
 #include "../gui/window.h"
+#include "../drivers/keyboard.h"
 
 #define NOTEPAD_COLS  32
 #define NOTEPAD_ROWS  12
