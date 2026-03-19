@@ -106,14 +106,9 @@ $(ISO_FILE): $(KERNEL_BIN)
 	@grub-mkrescue -o $(ISO_FILE) $(ISO_DIR) 2>/dev/null
 
 verify: $(KERNEL_BIN)
-	@echo "=== ELF Bilgisi ==="
 	@file $(KERNEL_BIN)
-	@echo "=== Relocation Kontrolu ==="
-	@readelf -r $(KERNEL_BIN) 2>/dev/null || echo "Relocation yok - TEMIZ"
-	@echo "=== Multiboot2 Kontrolu ==="
-	@grub-file --is-x86-multiboot2 $(KERNEL_BIN) && \
-		echo "BASARILI: Multiboot2 uyumlu" || \
-		echo "BASARISIZ: Multiboot2 uyumsuz"
+	@readelf -r $(KERNEL_BIN) 2>/dev/null || echo "Relocation yok"
+	@grub-file --is-x86-multiboot2 $(KERNEL_BIN) && echo "Multiboot2 OK" || echo "Multiboot2 FAIL"
 
 run: $(ISO_FILE)
 	@$(QEMU) -cdrom $(ISO_FILE) -m 128M
@@ -124,4 +119,4 @@ debug: $(ISO_FILE)
 clean:
 	@rm -f $(ALL_OBJECTS) $(KERNEL_BIN) $(ISO_FILE)
 	@rm -rf $(ISO_DIR)
-	@echo "  Temizlendi."
+	@echo "Temizlendi."
