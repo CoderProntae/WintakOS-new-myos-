@@ -18,6 +18,8 @@
 #include "../gui/widget.h"
 #include "../apps/terminal.h"
 #include "../apps/setup.h"
+#include "../apps/calculator.h"
+#include "../apps/notepad.h"
 #include "../fs/ramfs.h"
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
@@ -55,17 +57,18 @@ static uint32_t detect_memory_kb(void* mbi_ptr)
 }
 
 static terminal_t* main_terminal = NULL;
+static calculator_t* main_calc = NULL;
+static notepad_t* main_notepad = NULL;
+
+/* Hangi uygulama aktif: 0=terminal, 1=calc, 2=notepad */
+static uint8_t active_app = 0;
 
 void kernel_main(uint32_t magic, void* mbi_ptr)
 {
-    gdt_init();
-    idt_init();
-    pic_init();
-    isr_init();
+    gdt_init(); idt_init(); pic_init(); isr_init();
     pit_init(PIT_FREQUENCY);
 
     bool gfx = (magic == MULTIBOOT2_BOOTLOADER_MAGIC && fb_init(mbi_ptr));
-
     if (!gfx) {
         vga_init(); vga_font_install_turkish();
         vga_puts("WintakOS: Grafik modu bulunamad\x01.\n");
@@ -82,29 +85,50 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     framebuffer_t* fbi = fb_get_info();
     mouse_init(fbi->width, fbi->height);
     keyboard_init();
-
     __asm__ volatile("sti");
 
-    /* Kurulum sihirbazi */
     desktop_init();
-
-    bool already_setup = setup_run();
-
-    /* Tema uygula */
+    setup_run();
     desktop_apply_config();
 
-    if (already_setup) {
-        /* Dogrudan masaustune gec */
-    }
-
-    /* Terminal */
-    main_terminal = terminal_create(200, 80);
+    main_terminal = terminal_create(180, 60);
+    main_calc = calculator_create(20, 100);
+    main_notepad = notepad_create(450, 80);
 
     wm_set_dirty();
 
     while (1) {
+        /* Karakter girisi */
         uint8_t c = keyboard_getchar();
-        if (c && main_terminal) terminal_input_char(main_terminal, c);
+        if (c) {
+            /* Aktif pencereye yonlendir */
+            window_t* aw = NULL;
+            for (uint32_t i = 0; i < wm_get_count(); i++) {
+                window_t* w = wm_get_window(i);
+                if (w && w->active && (w->flags & WIN_FLAG_VISIBLE)) { aw = w; break; }
+            }
+
+            if (aw && main_terminal && aw == main_terminal->win)
+                terminal_input_char(main_terminal, c);
+            else if (aw && main_notepad && aw == main_notepad->win)
+                notepad_input_char(main_notepad, c);
+        }
+
+        /* Ozel tus girisi (ok tuslari vb.) */
+        key_event_t ev;
+        if (keyboard_poll(&ev) && !ev.released && ev.keycode != KEY_NONE) {
+            window_t* aw = NULL;
+            for (uint32_t i = 0; i < wm_get_count(); i++) {
+                window_t* w = wm_get_window(i);
+                if (w && w->active && (w->flags & WIN_FLAG_VISIBLE)) { aw = w; break; }
+            }
+
+            if (aw && main_terminal && aw == main_terminal->win)
+                terminal_input_key(main_terminal, ev.keycode);
+            else if (aw && main_notepad && aw == main_notepad->win)
+                notepad_input_key(main_notepad, ev.keycode);
+        }
+
         desktop_update();
         __asm__ volatile("hlt");
     }
