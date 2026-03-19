@@ -58,5 +58,6 @@ void keyboard_init(void);
 uint8_t keyboard_getchar(void);
 bool keyboard_poll(key_event_t* event);
 key_modifiers_t keyboard_get_modifiers(void);
+void keyboard_set_leds(bool scroll, bool num, bool caps);
 
 #endif
