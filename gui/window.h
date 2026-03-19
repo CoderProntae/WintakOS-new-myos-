@@ -11,7 +11,13 @@
 #define WIN_FLAG_VISIBLE    0x01
 #define WIN_FLAG_CLOSABLE   0x04
 
-typedef struct {
+/* Pencere icerik cizme ve tiklama callback tipleri */
+typedef struct window window_t;
+
+typedef void (*win_draw_fn)(window_t* win);
+typedef void (*win_click_fn)(window_t* win, int32_t rx, int32_t ry);
+
+struct window {
     int32_t  x, y;
     uint32_t width, height;
     char     title[64];
@@ -19,7 +25,9 @@ typedef struct {
     uint8_t  flags;
     uint8_t  id;
     bool     active;
-} window_t;
+    win_draw_fn  on_draw;
+    win_click_fn on_click;
+};
 
 void      wm_init(void);
 window_t* wm_create_window(int32_t x, int32_t y, uint32_t w, uint32_t h,
