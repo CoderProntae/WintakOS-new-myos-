@@ -14,10 +14,11 @@ static uint32_t piano_count = 0;
 #define BLACK_KEY_W  20
 #define BLACK_KEY_H  75
 #define NUM_WHITE    8
-#define PIANO_W      (NUM_WHITE * WHITE_KEY_W + 16)
-#define PIANO_H      (WHITE_KEY_H + 60)
+#define PIANO_CONTENT_W  (NUM_WHITE * WHITE_KEY_W)
+#define PIANO_CONTENT_H  (WHITE_KEY_H + 60)
+#define PIANO_W      (PIANO_CONTENT_W + 16)
+#define PIANO_H      (PIANO_CONTENT_H)
 
-/* Beyaz tuslar: C D E F G A B C */
 static const uint16_t white_freqs_o4[] = {
     NOTE_C4, NOTE_D4, NOTE_E4, NOTE_F4, NOTE_G4, NOTE_A4, NOTE_B4, NOTE_C5
 };
@@ -26,7 +27,6 @@ static const uint16_t white_freqs_o5[] = {
 };
 static const char white_labels[] = "CDEFGABC";
 
-/* Siyah tuslar: CS DS - FS GS AS */
 static const uint16_t black_freqs_o4[] = {
     NOTE_CS4, NOTE_DS4, 0, NOTE_FS4, NOTE_GS4, NOTE_AS4, 0
 };
@@ -34,11 +34,11 @@ static const uint16_t black_freqs_o5[] = {
     NOTE_CS5, NOTE_DS5, 0, NOTE_FS5, NOTE_GS5, NOTE_AS5, 0
 };
 
-/* Klavye haritalamasi: asdfghjk = beyaz, wetyuo = siyah */
 static const char kb_white[] = "asdfghjk";
 static const char kb_black[] = "wetyu";
 
-static void px_char(uint32_t px, uint32_t py, uint8_t c, uint32_t fg, uint32_t bg)
+static void px_char(uint32_t px, uint32_t py, uint8_t c,
+                    uint32_t fg, uint32_t bg)
 {
     framebuffer_t* fb = fb_get_info();
     if (px >= fb->width - 8 || py >= fb->height - 16) return;
@@ -50,9 +50,22 @@ static void px_char(uint32_t px, uint32_t py, uint8_t c, uint32_t fg, uint32_t b
     }
 }
 
-static void px_str(uint32_t px, uint32_t py, const char* s, uint32_t fg, uint32_t bg)
+static void px_str(uint32_t px, uint32_t py, const char* s,
+                   uint32_t fg, uint32_t bg)
 {
-    while (*s) { px_char(px, py, (uint8_t)*s, fg, bg); px += 8; s++; }
+    while (*s) {
+        px_char(px, py, (uint8_t)*s, fg, bg);
+        px += 8; s++;
+    }
+}
+
+/* Icerik offset hesapla — pencere buyurse ortala */
+static void piano_get_offset(window_t* win, int32_t* ox, int32_t* oy)
+{
+    int32_t extra_w = (int32_t)win->width - (int32_t)PIANO_W;
+    int32_t extra_h = (int32_t)win->height - (int32_t)PIANO_H;
+    *ox = extra_w > 0 ? extra_w / 2 : 0;
+    *oy = extra_h > 0 ? extra_h / 2 : 0;
 }
 
 static void piano_draw(window_t* win)
@@ -62,24 +75,24 @@ static void piano_draw(window_t* win)
         if (pianos[i].win == win) { p = &pianos[i]; break; }
     if (!p) return;
 
-    int32_t bx = win->x + 8;
-    int32_t by = win->y + 8;
+    int32_t off_x, off_y;
+    piano_get_offset(win, &off_x, &off_y);
+
+    int32_t bx = win->x + 8 + off_x;
+    int32_t by = win->y + 8 + off_y;
     if (bx < 0 || by < 0) return;
 
     /* Oktav gosterge */
-    char obuf[16];
-    uint32_t op = 0;
+    char obuf[16]; uint32_t op = 0;
     const char* pf = "Oktav: ";
     while (*pf) obuf[op++] = *pf++;
     obuf[op++] = '0' + p->octave;
-    obuf[op++] = ' ';
-    obuf[op++] = '(';
-    obuf[op++] = 'Z';
-    obuf[op++] = '/';
-    obuf[op++] = 'X';
-    obuf[op++] = ')';
+    obuf[op++] = ' '; obuf[op++] = '(';
+    obuf[op++] = 'Z'; obuf[op++] = '/';
+    obuf[op++] = 'X'; obuf[op++] = ')';
     obuf[op] = 0;
-    px_str((uint32_t)bx, (uint32_t)by, obuf, RGB(200, 200, 220), win->bg_color);
+    px_str((uint32_t)bx, (uint32_t)by, obuf,
+           RGB(200, 200, 220), win->bg_color);
 
     uint32_t key_y = (uint32_t)by + 24;
 
@@ -87,48 +100,46 @@ static void piano_draw(window_t* win)
     for (uint32_t i = 0; i < NUM_WHITE; i++) {
         uint32_t kx = (uint32_t)bx + i * WHITE_KEY_W;
         bool active = (p->active_key >= 0 && (uint32_t)p->active_key == i);
-
         uint32_t kcolor = active ? RGB(200, 220, 255) : COLOR_WHITE;
+
         fb_fill_rect(kx, key_y, WHITE_KEY_W - 2, WHITE_KEY_H, kcolor);
         fb_fill_rect(kx, key_y, 1, WHITE_KEY_H, RGB(120, 120, 120));
-        fb_fill_rect(kx + WHITE_KEY_W - 3, key_y, 1, WHITE_KEY_H, RGB(120, 120, 120));
-        fb_fill_rect(kx, key_y + WHITE_KEY_H - 1, WHITE_KEY_W - 2, 1, RGB(80, 80, 80));
+        fb_fill_rect(kx + WHITE_KEY_W - 3, key_y, 1, WHITE_KEY_H,
+                     RGB(120, 120, 120));
+        fb_fill_rect(kx, key_y + WHITE_KEY_H - 1, WHITE_KEY_W - 2, 1,
+                     RGB(80, 80, 80));
 
-        /* Nota adi */
         px_char(kx + 10, key_y + WHITE_KEY_H - 20, white_labels[i],
                 RGB(80, 80, 80), kcolor);
 
-        /* Klavye tusu */
-        if (i < 8) {
+        if (i < 8)
             px_char(kx + 10, key_y + WHITE_KEY_H - 38, kb_white[i],
                     RGB(160, 160, 180), kcolor);
-        }
     }
 
     /* Siyah tuslar */
-    /* Siyah tus pozisyonlari: 0,1, (2 yok), 3,4,5, (6 yok) */
     uint32_t black_positions[] = {0, 1, 3, 4, 5};
     for (uint32_t i = 0; i < 5; i++) {
         uint32_t pos = black_positions[i];
-        uint32_t kx = (uint32_t)bx + pos * WHITE_KEY_W + WHITE_KEY_W - BLACK_KEY_W / 2;
-
-        bool active = (p->active_key >= 0 && (uint32_t)p->active_key == (NUM_WHITE + i));
-
+        uint32_t kx = (uint32_t)bx + pos * WHITE_KEY_W +
+                      WHITE_KEY_W - BLACK_KEY_W / 2;
+        bool active = (p->active_key >= 0 &&
+                       (uint32_t)p->active_key == (NUM_WHITE + i));
         uint32_t kcolor = active ? RGB(60, 60, 100) : RGB(20, 20, 30);
+
         fb_fill_rect(kx, key_y, BLACK_KEY_W, BLACK_KEY_H, kcolor);
         fb_fill_rect(kx, key_y, 1, BLACK_KEY_H, RGB(40, 40, 50));
-        fb_fill_rect(kx + BLACK_KEY_W - 1, key_y, 1, BLACK_KEY_H, RGB(40, 40, 50));
+        fb_fill_rect(kx + BLACK_KEY_W - 1, key_y, 1, BLACK_KEY_H,
+                     RGB(40, 40, 50));
 
-        /* Klavye tusu */
-        if (i < 5) {
+        if (i < 5)
             px_char(kx + 6, key_y + BLACK_KEY_H - 20, kb_black[i],
                     RGB(120, 120, 140), kcolor);
-        }
     }
 
-    /* Kullanim bilgisi */
     uint32_t info_y = key_y + WHITE_KEY_H + 8;
-    px_str((uint32_t)bx, info_y, "Klavye: asdfghjk wetyuo", RGB(140, 140, 160), win->bg_color);
+    px_str((uint32_t)bx, info_y, "Klavye: asdfghjk wetyuo",
+           RGB(140, 140, 160), win->bg_color);
 }
 
 static void piano_click(window_t* win, int32_t rx, int32_t ry)
@@ -138,22 +149,29 @@ static void piano_click(window_t* win, int32_t rx, int32_t ry)
         if (pianos[i].win == win) { p = &pianos[i]; break; }
     if (!p) return;
 
-    int32_t key_y_start = 32;
-    if (ry < key_y_start || ry > key_y_start + (int32_t)WHITE_KEY_H) return;
-    if (rx < 8) return;
+    int32_t off_x, off_y;
+    piano_get_offset(win, &off_x, &off_y);
 
-    int32_t kx = rx - 8;
+    /* Offseti tiklama koordinatindan cikar */
+    int32_t lrx = rx - off_x;
+    int32_t lry = ry - off_y;
+
+    int32_t key_y_start = 32;
+    if (lry < key_y_start || lry > key_y_start + (int32_t)WHITE_KEY_H) return;
+    if (lrx < 8) return;
+
+    int32_t kx = lrx - 8;
     const uint16_t* wf = (p->octave == 5) ? white_freqs_o5 : white_freqs_o4;
     const uint16_t* bf = (p->octave == 5) ? black_freqs_o5 : black_freqs_o4;
 
-    /* Once siyah tuslari kontrol et (ustte oldugu icin oncelikli) */
-    if (ry < key_y_start + (int32_t)BLACK_KEY_H) {
+    if (lry < key_y_start + (int32_t)BLACK_KEY_H) {
         uint32_t black_positions[] = {0, 1, 3, 4, 5};
         for (uint32_t i = 0; i < 5; i++) {
             uint32_t pos = black_positions[i];
-            int32_t bkx = (int32_t)(pos * WHITE_KEY_W + WHITE_KEY_W - BLACK_KEY_W / 2);
+            int32_t bkx = (int32_t)(pos * WHITE_KEY_W +
+                           WHITE_KEY_W - BLACK_KEY_W / 2);
             if (kx >= bkx && kx < bkx + (int32_t)BLACK_KEY_W) {
-                uint32_t freq_idx = pos; /* black_freqs indeksi */
+                uint32_t freq_idx = pos;
                 if (freq_idx < 7 && bf[freq_idx] != 0) {
                     p->active_key = (int8_t)(NUM_WHITE + i);
                     speaker_play_tone(bf[freq_idx]);
@@ -164,7 +182,6 @@ static void piano_click(window_t* win, int32_t rx, int32_t ry)
         }
     }
 
-    /* Beyaz tus */
     uint32_t white_idx = (uint32_t)kx / WHITE_KEY_W;
     if (white_idx < NUM_WHITE) {
         p->active_key = (int8_t)white_idx;
@@ -180,7 +197,6 @@ void piano_input_char(piano_t* p, uint8_t c)
     const uint16_t* wf = (p->octave == 5) ? white_freqs_o5 : white_freqs_o4;
     const uint16_t* bf = (p->octave == 5) ? black_freqs_o5 : black_freqs_o4;
 
-    /* Oktav degistir */
     if (c == 'z' || c == 'Z') {
         if (p->octave > 4) { p->octave--; wm_set_dirty(); }
         return;
@@ -190,7 +206,6 @@ void piano_input_char(piano_t* p, uint8_t c)
         return;
     }
 
-    /* Beyaz tuslar */
     for (uint32_t i = 0; i < 8; i++) {
         if (c == (uint8_t)kb_white[i]) {
             p->active_key = (int8_t)i;
@@ -200,8 +215,7 @@ void piano_input_char(piano_t* p, uint8_t c)
         }
     }
 
-    /* Siyah tuslar: w=CS, e=DS, t=FS, y=GS, u=AS */
-    uint32_t black_freq_map[] = {0, 1, 3, 4, 5}; /* bf[] indeksleri */
+    uint32_t black_freq_map[] = {0, 1, 3, 4, 5};
     for (uint32_t i = 0; i < 5; i++) {
         if (c == (uint8_t)kb_black[i]) {
             uint32_t fi = black_freq_map[i];
@@ -232,7 +246,8 @@ piano_t* piano_create(int32_t x, int32_t y)
     p->active_key = -1;
     p->octave = 4;
 
-    p->win = wm_create_window(x, y, PIANO_W, PIANO_H, "Piyano", RGB(40, 40, 55));
+    p->win = wm_create_window(x, y, PIANO_W, PIANO_H, "Piyano",
+                               RGB(40, 40, 55));
     if (p->win) {
         p->win->on_draw = piano_draw;
         p->win->on_click = piano_click;
