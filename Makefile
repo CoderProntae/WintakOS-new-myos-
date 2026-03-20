@@ -14,7 +14,7 @@ ASFLAGS := -f elf32
 CFLAGS  := $(CFLAGS_ARCH) -std=gnu99 -ffreestanding -O2 \
            -Wall -Wextra -Werror \
            -fno-stack-protector -fno-pie -fno-pic \
-           -I. -Iinclude -Ikernel -Icpu -Idrivers -Imemory -Ilib -Igui -Iapps -Ifs
+           -I. -Iinclude -Ikernel -Icpu -Idrivers -Imemory -Ilib -Igui -Iapps -Ifs -Inet
 
 LINK_FLAGS := $(CFLAGS_ARCH) -T linker.ld -ffreestanding -O2 -nostdlib \
               -no-pie -static \
@@ -42,6 +42,7 @@ C_SOURCES   := kernel/kernel.c \
                drivers/mouse.c \
                drivers/speaker.c \
                drivers/ac97.c \
+               drivers/rtl8139.c \
                memory/pmm.c \
                memory/heap.c \
                lib/string.c \
@@ -55,7 +56,9 @@ C_SOURCES   := kernel/kernel.c \
                apps/sysmonitor.c \
                apps/filemanager.c \
                apps/piano.c \
-               fs/ramfs.c
+               apps/network.c \
+               fs/ramfs.c \
+               net/net.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
 C_OBJECTS   := $(C_SOURCES:.c=.o)
@@ -65,10 +68,10 @@ KERNEL_BIN := wintakos.bin
 ISO_FILE   := wintakos.iso
 ISO_DIR    := iso
 
-.PHONY: all clean run run-vbox debug verify
+.PHONY: all clean run debug verify
 
 all: $(ISO_FILE)
-	@echo "  WintakOS Milestone 11 derlendi! ISO: $(ISO_FILE)"
+	@echo "  WintakOS " WINTAKOS_MILESTONE " derlendi!"
 
 boot/boot.o: boot/boot.asm
 	@$(AS) $(ASFLAGS) $< -o $@
@@ -100,6 +103,9 @@ apps/%.o: apps/%.c
 fs/%.o: fs/%.c
 	@$(CC) $(CFLAGS) -c $< -o $@
 
+net/%.o: net/%.c
+	@$(CC) $(CFLAGS) -c $< -o $@
+
 $(KERNEL_BIN): $(ALL_OBJECTS)
 	@$(CC) $(LINK_FLAGS) -o $@ $(ALL_OBJECTS) -lgcc
 
@@ -113,18 +119,14 @@ verify: $(KERNEL_BIN)
 	@file $(KERNEL_BIN)
 	@grub-file --is-x86-multiboot2 $(KERNEL_BIN) && echo "Multiboot2 OK" || echo "FAIL"
 
-# QEMU: AC97 ses karti + PC Speaker
+# QEMU: RTL8139 NIC + AC97 ses
 run: $(ISO_FILE)
 	@$(QEMU) -cdrom $(ISO_FILE) -m 512M \
+		-device rtl8139,netdev=net0 \
+		-netdev user,id=net0 \
 		-device AC97 \
 		-audiodev sdl,id=snd0 \
 		-machine pcspk-audiodev=snd0
-
-# VirtualBox icin: ISO'yu dogrudan kullan
-# VBoxManage createvm --name WintakOS --register
-# VBoxManage modifyvm WintakOS --audio-driver default --audio-controller ac97
-# VBoxManage storagectl WintakOS --name IDE --add ide
-# VBoxManage storageattach WintakOS --storagectl IDE --port 0 --type dvddrive --medium wintakos.iso
 
 debug: $(ISO_FILE)
 	@$(QEMU) -cdrom $(ISO_FILE) -m 512M -s -S
