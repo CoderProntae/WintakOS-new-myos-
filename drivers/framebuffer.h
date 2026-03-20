@@ -20,10 +20,12 @@
 #define COLOR_BG_DEFAULT  RGB(30, 30, 50)
 
 typedef struct {
-    uint32_t* address;      /* donanim framebuffer */
-    uint32_t* backbuffer;   /* cift tamponlama icin */
-    uint32_t  width;
-    uint32_t  height;
+    uint32_t* address;
+    uint32_t* backbuffer;
+    uint32_t  width;       /* sanal (uygulamalarin gordugu) */
+    uint32_t  height;      /* sanal */
+    uint32_t  hw_width;    /* donanim max */
+    uint32_t  hw_height;   /* donanim max */
     uint32_t  pitch;
     uint8_t   bpp;
     bool      available;
@@ -34,10 +36,15 @@ void     fb_put_pixel(uint32_t x, uint32_t y, uint32_t color);
 uint32_t fb_get_pixel(uint32_t x, uint32_t y);
 void     fb_fill_rect(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color);
 void     fb_clear(uint32_t color);
-void     fb_swap(void);          /* backbuffer -> ekran */
+void     fb_swap(void);
 void     fb_draw_hline(uint32_t x, uint32_t y, uint32_t w, uint32_t color);
 void     fb_draw_vline(uint32_t x, uint32_t y, uint32_t h, uint32_t color);
 void     fb_draw_rect_outline(uint32_t x, uint32_t y, uint32_t w, uint32_t h, uint32_t color);
+
+/* Sanal cozunurluk */
+void     fb_set_virtual_size(uint32_t w, uint32_t h);
+uint32_t fb_get_max_width(void);
+uint32_t fb_get_max_height(void);
 
 framebuffer_t* fb_get_info(void);
 
