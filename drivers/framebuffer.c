@@ -3,7 +3,7 @@
 
 static framebuffer_t fb;
 
-#define FB_MAX_PIXELS (1024 * 768)
+#define FB_MAX_PIXELS (1280 * 1024)
 static uint32_t backbuf[FB_MAX_PIXELS];
 
 #define MB2_TAG_END         0
