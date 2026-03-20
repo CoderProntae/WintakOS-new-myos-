@@ -4,6 +4,7 @@
 #include "../drivers/framebuffer.h"
 #include "../drivers/font8x16.h"
 #include "../drivers/ata.h"
+#include "../apps/setup.h"          /* BU SATIRI EKLE */
 #include "../lib/string.h"
 #include "../fs/ramfs.h"
 
