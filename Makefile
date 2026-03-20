@@ -59,6 +59,9 @@ C_SOURCES   := kernel/kernel.c \
                apps/network.c \
                fs/ramfs.c \
                drivers/nic.c \
+               drivers/virtio_net.c \
+               drivers/e1000.c \
+               drivers/pcnet.c \
                net/net.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
