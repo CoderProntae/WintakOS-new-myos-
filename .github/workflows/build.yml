@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Milestone 11 - Derle ve Test Et
+    name: Milestone 12 - Derle ve Test Et
     runs-on: ubuntu-latest
 
     steps:
@@ -33,12 +33,13 @@ jobs:
         run: |
           timeout 5 qemu-system-i386 \
             -cdrom wintakos.iso -m 512M \
+            -device rtl8139 \
             -display none -serial stdio \
             -no-reboot -no-shutdown 2>&1 || true
 
       - name: ISO artifact yukle
         uses: actions/upload-artifact@v4
         with:
-          name: wintakos-iso-m11
+          name: wintakos-iso-m12
           path: wintakos.iso
           retention-days: 30
