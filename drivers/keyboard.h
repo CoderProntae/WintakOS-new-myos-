@@ -37,6 +37,9 @@
 #define KEY_DELETE      0x9A
 #define KEY_NUMLOCK     0x9B
 #define KEY_SCROLLLOCK  0x9C
+/* Eger zaten yoksa, diger KEY_ tanimlarinin yanina ekle */
+#define KEY_PAGE_UP    0x49
+#define KEY_PAGE_DOWN  0x51
 
 typedef struct {
     uint8_t shift    : 1;
