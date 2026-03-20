@@ -12,6 +12,8 @@
 #include "../drivers/keyboard.h"
 #include "../include/version.h"
 #include "../net/net.h"
+#include "../drivers/ata.h"
+#include "../fs/vfs.h"
 
 static void term_draw(window_t* win);
 static void term_execute(terminal_t* term);
@@ -242,6 +244,8 @@ static void term_execute(terminal_t* term)
         terminal_print(term, "  echo <..>  Metin yazd\x01r");
         terminal_print(term, "  ifconfig   A\x05 bilgileri");
         terminal_print(term, "  ping       Gateway'e ping");
+        terminal_print(term, "  diskinfo   Disk bilgileri");
+        terminal_print(term, "  lsblk      Blok cihazlar\x01");
         terminal_print(term, "  ver        S\x07r\x07m bilgisi");
     }
     else if (str_eq(term->cmd, "clear")) {
@@ -438,6 +442,76 @@ static void term_execute(terminal_t* term)
         } else {
             terminal_print(term, "Gateway'e ping g\x0Cnderiliyor...");
             net_send_ping(ns->gateway);
+        }
+    }
+        else if (str_eq(term->cmd, "diskinfo")) {
+        terminal_print_color(term, "=== Disk Bilgisi ===", RGB(100, 200, 255));
+        uint32_t dc = ata_get_drive_count();
+        if (dc == 0) {
+            terminal_print_color(term, "Disk bulunamad\x01.",
+                                 RGB(255, 100, 100));
+        } else {
+            char buf[64]; char nbuf[12];
+            for (uint8_t i = 0; i < ATA_MAX_DRIVES; i++) {
+                ata_drive_t* d = ata_get_info(i);
+                if (!d || !d->present) continue;
+
+                uint32_t p = 0;
+                buf[p++] = 'd'; buf[p++] = 'i'; buf[p++] = 's';
+                buf[p++] = 'k'; buf[p++] = '0' + i; buf[p++] = ':';
+                buf[p++] = ' ';
+
+                if (d->is_ata) {
+                    const char* m = d->model;
+                    while (*m && p < 50) buf[p++] = *m++;
+                } else {
+                    const char* at = "ATAPI";
+                    while (*at) buf[p++] = *at++;
+                }
+                buf[p] = 0;
+                terminal_print(term, buf);
+
+                if (d->is_ata && d->size_mb > 0) {
+                    p = 0;
+                    const char* pf = "  Boyut: ";
+                    while (*pf) buf[p++] = *pf++;
+                    uint_to_str(d->size_mb, nbuf, 12);
+                    for (uint32_t j = 0; nbuf[j]; j++) buf[p++] = nbuf[j];
+                    pf = " MB";
+                    while (*pf) buf[p++] = *pf++;
+                    buf[p] = 0;
+                    terminal_print(term, buf);
+                }
+            }
+        }
+    }
+    else if (str_eq(term->cmd, "lsblk")) {
+        terminal_print_color(term, "NAME    SIZE    TYPE",
+                             RGB(100, 200, 255));
+        for (uint8_t i = 0; i < ATA_MAX_DRIVES; i++) {
+            ata_drive_t* d = ata_get_info(i);
+            if (!d || !d->present) continue;
+            char buf[48]; char nbuf[12];
+            uint32_t p = 0;
+            buf[p++] = 'd'; buf[p++] = 'i'; buf[p++] = 's';
+            buf[p++] = 'k'; buf[p++] = '0' + i;
+            while (p < 8) buf[p++] = ' ';
+            if (d->is_ata) {
+                uint_to_str(d->size_mb, nbuf, 12);
+                for (uint32_t j = 0; nbuf[j]; j++) buf[p++] = nbuf[j];
+                buf[p++] = 'M';
+            } else {
+                buf[p++] = '-';
+            }
+            while (p < 16) buf[p++] = ' ';
+            const char* tp = d->is_ata ? "ATA" : "ATAPI";
+            while (*tp) buf[p++] = *tp++;
+            buf[p] = 0;
+            terminal_print(term, buf);
+        }
+        if (ata_get_drive_count() == 0) {
+            terminal_print_color(term, "(disk yok)",
+                                 RGB(150, 150, 150));
         }
     }
     else if (str_eq(term->cmd, "ver")) {
