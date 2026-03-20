@@ -3,6 +3,7 @@
 #include "../gui/desktop.h"
 #include "../drivers/framebuffer.h"
 #include "../drivers/font8x16.h"
+#include "../drivers/ata.h"
 #include "../lib/string.h"
 #include "../fs/ramfs.h"
 
@@ -20,31 +21,27 @@ static const res_entry_t res_options[] = {
     { 800,  600,  "800x600"   },
     { 1024, 768,  "1024x768"  },
     { 1280, 720,  "1280x720"  },
-    { 1280, 1024, "1280x1024" },
-    { 1920, 1080, "1920x1080" },
 };
-#define RES_COUNT 6
+#define RES_COUNT 4
 
-/* Sabit layout pozisyonlari */
+/* Layout sabitleri */
 #define L_TITLE_Y       8
 #define L_INFO_Y        36
 #define L_LINE_H        20
-#define L_SEP_Y         140
-#define L_SELECT_Y      156
-#define L_DROPDOWN_Y    180
+#define L_SEP_Y         136
+#define L_SELECT_Y      148
+#define L_DROPDOWN_Y    168
 #define L_DROPDOWN_H    28
 #define L_ITEM_H        24
-#define L_APPLY_Y       220
-#define L_MSG_Y         258
-#define L_GRUB1_Y       280
-#define L_GRUB2_Y       300
-#define L_GRUB3_Y       322
+#define L_APPLY_Y       210
+#define L_MSG_Y         248
+#define L_GRUB_Y        270
+#define L_TIP_Y         292
 
 static void uint_to_str_d(uint32_t val, char* buf)
 {
     if (val == 0) { buf[0] = '0'; buf[1] = 0; return; }
-    char tmp[12];
-    uint32_t tp = 0;
+    char tmp[12]; uint32_t tp = 0;
     while (val > 0) { tmp[tp++] = '0' + (val % 10); val /= 10; }
     uint32_t i = 0;
     while (tp > 0) buf[i++] = tmp[--tp];
@@ -53,8 +50,7 @@ static void uint_to_str_d(uint32_t val, char* buf)
 
 static void res_to_str(uint32_t w, uint32_t h, char* buf)
 {
-    uint32_t p = 0;
-    char nb[8];
+    uint32_t p = 0; char nb[8];
     uint_to_str_d(w, nb);
     for (uint32_t i = 0; nb[i]; i++) buf[p++] = nb[i];
     buf[p++] = 'x';
@@ -70,26 +66,22 @@ static display_app_t* find_disp(window_t* win)
     return NULL;
 }
 
-static void draw_char_d(uint32_t px, uint32_t py, uint8_t c,
-                         uint32_t fg, uint32_t bg)
+static void draw_str_abs(uint32_t px, uint32_t py, const char* s,
+                          uint32_t fg, uint32_t bg)
 {
     framebuffer_t* fb = fb_get_info();
-    if (px >= fb->width - 8 || py >= fb->height - 16) return;
-    const uint8_t* glyph = font8x16_data[c];
-    for (uint32_t y = 0; y < 16; y++) {
-        uint8_t line = glyph[y];
-        for (uint32_t x = 0; x < 8; x++)
-            fb_put_pixel(px + x, py + y, (line & (0x80 >> x)) ? fg : bg);
-    }
-}
-
-static void draw_str_d(uint32_t px, uint32_t py, const char* s,
-                        uint32_t fg, uint32_t bg)
-{
     while (*s) {
-        draw_char_d(px, py, (uint8_t)*s, fg, bg);
-        px += 8;
-        s++;
+        if (px >= fb->width - 8) break;
+        if (px < fb->width - 8 && py < fb->height - 16) {
+            const uint8_t* glyph = font8x16_data[(uint8_t)*s];
+            for (uint32_t y = 0; y < 16; y++) {
+                uint8_t line = glyph[y];
+                for (uint32_t x = 0; x < 8; x++)
+                    fb_put_pixel(px + x, py + y,
+                                 (line & (0x80 >> x)) ? fg : bg);
+            }
+        }
+        px += 8; s++;
     }
 }
 
@@ -99,23 +91,17 @@ static void disp_draw(window_t* win)
     if (!d) return;
 
     framebuffer_t* fb = fb_get_info();
-    int32_t wx = win->x;
-    int32_t wy = win->y;
     char buf[64];
+    uint32_t y = L_INFO_Y;
 
-    /* ---- Baslik ---- */
     widget_draw_label(win, 12, L_TITLE_Y,
                       "=== Ekran Ayarlar\x01 ===", RGB(100, 200, 255));
 
-    /* ---- Mevcut bilgiler ---- */
-    uint32_t y = L_INFO_Y;
-
-    /* Cozunurluk */
+    /* Mevcut */
     {
-        uint32_t p = 0;
+        uint32_t p = 0; char rb[16];
         const char* pf = "Mevcut:  ";
         while (*pf) buf[p++] = *pf++;
-        char rb[16];
         res_to_str(fb->width, fb->height, rb);
         for (uint32_t i = 0; rb[i]; i++) buf[p++] = rb[i];
         buf[p] = 0;
@@ -125,29 +111,12 @@ static void disp_draw(window_t* win)
 
     /* Renk */
     {
-        uint32_t p = 0;
+        uint32_t p = 0; char nb[8];
         const char* pf = "Renk:    ";
         while (*pf) buf[p++] = *pf++;
-        char nb[8];
         uint_to_str_d(fb->bpp, nb);
         for (uint32_t i = 0; nb[i]; i++) buf[p++] = nb[i];
-        pf = " bit";
-        while (*pf) buf[p++] = *pf++;
-        buf[p] = 0;
-    }
-    widget_draw_label(win, 12, y, buf, RGB(200, 200, 200));
-    y += L_LINE_H;
-
-    /* Pitch */
-    {
-        uint32_t p = 0;
-        const char* pf = "Pitch:   ";
-        while (*pf) buf[p++] = *pf++;
-        char nb[8];
-        uint_to_str_d(fb->pitch, nb);
-        for (uint32_t i = 0; nb[i]; i++) buf[p++] = nb[i];
-        pf = " B/sat\x01r";
-        while (*pf) buf[p++] = *pf++;
+        pf = " bit"; while (*pf) buf[p++] = *pf++;
         buf[p] = 0;
     }
     widget_draw_label(win, 12, y, buf, RGB(200, 200, 200));
@@ -156,172 +125,140 @@ static void disp_draw(window_t* win)
     /* VRAM */
     {
         uint32_t vram_kb = (fb->pitch * fb->height) / 1024;
-        uint32_t p = 0;
+        uint32_t p = 0; char nb[8];
         const char* pf = "VRAM:    ";
         while (*pf) buf[p++] = *pf++;
-        char nb[8];
         uint_to_str_d(vram_kb, nb);
         for (uint32_t i = 0; nb[i]; i++) buf[p++] = nb[i];
-        pf = " KB";
-        while (*pf) buf[p++] = *pf++;
+        pf = " KB"; while (*pf) buf[p++] = *pf++;
         buf[p] = 0;
     }
     widget_draw_label(win, 12, y, buf, RGB(200, 200, 200));
     y += L_LINE_H;
 
-    /* FB adresi */
+    /* Disk durumu */
     {
-        uint32_t p = 0;
-        const char* pf = "Adres:   0x";
+        uint32_t dc = ata_get_drive_count();
+        uint32_t p = 0; char nb[8];
+        const char* pf = "Disk:    ";
         while (*pf) buf[p++] = *pf++;
-        const char hex[] = "0123456789ABCDEF";
-        uint32_t addr = (uint32_t)fb->address;
-        for (int i = 28; i >= 0; i -= 4)
-            buf[p++] = hex[(addr >> i) & 0xF];
+        if (dc == 0) {
+            pf = "Bulunamad\x01";
+            while (*pf) buf[p++] = *pf++;
+        } else {
+            uint_to_str_d(dc, nb);
+            for (uint32_t i = 0; nb[i]; i++) buf[p++] = nb[i];
+            pf = " s\x07r\x07c\x07";
+            while (*pf) buf[p++] = *pf++;
+        }
         buf[p] = 0;
     }
-    widget_draw_label(win, 12, y, buf, RGB(180, 180, 180));
+    widget_draw_label(win, 12, y, buf,
+                      ata_get_drive_count() > 0 ?
+                      RGB(100, 255, 100) : RGB(255, 100, 100));
 
-    /* ---- Ayirici ---- */
-    if (wx + 8 >= 0 && wy + (int32_t)L_SEP_Y >= 0)
-        fb_fill_rect((uint32_t)(wx + 8), (uint32_t)(wy + (int32_t)L_SEP_Y),
+    /* Ayirici */
+    if (win->x + 8 >= 0 && win->y + (int32_t)L_SEP_Y >= 0)
+        fb_fill_rect((uint32_t)(win->x + 8),
+                     (uint32_t)(win->y + (int32_t)L_SEP_Y),
                      win->width - 16, 1, RGB(60, 60, 100));
 
-    /* ---- Secim etiketi ---- */
+    /* Secim etiketi */
     widget_draw_label(win, 12, L_SELECT_Y,
-                      "\x10\x08z\x07n\x07rl\x07k Se\x0F:",
+                      "Boot \x10\x08z\x07n\x07rl\x07\x05\x07:",
                       RGB(200, 200, 220));
 
-    /* ---- Dropdown buton ---- */
+    /* Dropdown buton */
     {
-        uint32_t dbx = 24;
-        uint32_t dby = L_DROPDOWN_Y;
-        uint32_t dbw = 200;
-        uint32_t dbh = L_DROPDOWN_H;
-
-        uint32_t btn_bg = d->dropdown_open ? RGB(50, 70, 120) :
-                          RGB(40, 50, 80);
-
-        widget_draw_button(win, dbx, dby, dbw, dbh,
+        uint32_t dbg = d->dropdown_open ? RGB(50, 70, 120) :
+                       RGB(40, 50, 80);
+        widget_draw_button(win, 24, L_DROPDOWN_Y, 200, L_DROPDOWN_H,
                            res_options[d->selected].label,
-                           btn_bg, COLOR_WHITE);
+                           dbg, COLOR_WHITE);
 
-        /* Ok isareti (saga bakan ucgen) */
-        int32_t arrow_x = wx + (int32_t)dbx + (int32_t)dbw - 20;
-        int32_t arrow_y = wy + (int32_t)dby + 8;
-        if (arrow_x > 0 && arrow_y > 0) {
-            if (d->dropdown_open) {
-                /* Yukari ok */
-                draw_char_d((uint32_t)arrow_x, (uint32_t)arrow_y,
-                            '^', COLOR_WHITE, btn_bg);
-            } else {
-                /* Asagi ok */
-                draw_char_d((uint32_t)arrow_x, (uint32_t)arrow_y,
-                            'v', COLOR_WHITE, btn_bg);
-            }
-        }
+        /* Ok isareti */
+        int32_t ax = win->x + 24 + 200 - 20;
+        int32_t ay = win->y + (int32_t)L_DROPDOWN_Y + 6;
+        if (ax > 0 && ay > 0)
+            draw_str_abs((uint32_t)ax, (uint32_t)ay,
+                         d->dropdown_open ? "^" : "v",
+                         COLOR_WHITE, dbg);
     }
 
-    /* ---- Dropdown listesi (aciksa) ---- */
+    /* Dropdown liste */
     if (d->dropdown_open) {
-        uint32_t lx = (uint32_t)(wx + 24);
-        uint32_t ly = (uint32_t)(wy + (int32_t)L_DROPDOWN_Y +
+        uint32_t lx = (uint32_t)(win->x + 24);
+        uint32_t ly = (uint32_t)(win->y + (int32_t)L_DROPDOWN_Y +
                                   (int32_t)L_DROPDOWN_H);
         uint32_t lw = 200;
-        uint32_t total_h = RES_COUNT * L_ITEM_H;
+        uint32_t th = RES_COUNT * L_ITEM_H;
 
-        /* Liste arka plani */
         if (lx > 0 && ly > 0) {
-            /* Golge */
-            fb_fill_rect(lx + 2, ly + 2, lw, total_h, RGB(10, 10, 20));
-            /* Kutu */
-            fb_fill_rect(lx, ly, lw, total_h, RGB(30, 35, 55));
-            fb_draw_rect_outline(lx, ly, lw, total_h, RGB(80, 100, 160));
+            fb_fill_rect(lx + 2, ly + 2, lw, th, RGB(10, 10, 20));
+            fb_fill_rect(lx, ly, lw, th, RGB(30, 35, 55));
+            fb_draw_rect_outline(lx, ly, lw, th, RGB(80, 100, 160));
 
             for (uint32_t i = 0; i < RES_COUNT; i++) {
                 uint32_t iy = ly + i * L_ITEM_H;
-                bool current = (res_options[i].w == fb->width &&
-                                res_options[i].h == fb->height);
+                bool cur = (res_options[i].w == fb->width &&
+                            res_options[i].h == fb->height);
                 bool sel = (d->selected == i);
+                uint32_t ibg = sel ? RGB(50, 80, 160) : RGB(30, 35, 55);
 
-                uint32_t item_bg;
+                fb_fill_rect(lx + 1, iy, lw - 2, L_ITEM_H, ibg);
                 if (sel)
-                    item_bg = RGB(50, 80, 160);
-                else
-                    item_bg = RGB(30, 35, 55);
-
-                fb_fill_rect(lx + 1, iy, lw - 2, L_ITEM_H, item_bg);
-
-                /* Secili ise tik isareti */
-                if (sel) {
-                    draw_str_d(lx + 4, iy + 4, ">",
-                               RGB(100, 200, 255), item_bg);
-                }
-
-                draw_str_d(lx + 16, iy + 4,
-                           res_options[i].label,
-                           COLOR_WHITE, item_bg);
-
-                if (current) {
-                    draw_str_d(lx + 120, iy + 4,
-                               "(aktif)", RGB(100, 255, 100), item_bg);
-                }
-
-                /* Ayirici cizgi */
-                if (i < RES_COUNT - 1) {
+                    draw_str_abs(lx + 4, iy + 4, ">",
+                                 RGB(100, 200, 255), ibg);
+                draw_str_abs(lx + 16, iy + 4,
+                             res_options[i].label, COLOR_WHITE, ibg);
+                if (cur)
+                    draw_str_abs(lx + 110, iy + 4,
+                                 "(aktif)", RGB(100, 255, 100), ibg);
+                if (i < RES_COUNT - 1)
                     fb_draw_hline(lx + 4, iy + L_ITEM_H - 1,
                                  lw - 8, RGB(50, 55, 80));
-                }
             }
         }
+        return; /* dropdown acikken alt kisimlari cizme */
     }
 
-    /* ---- Dropdown kapali ise alttaki icerik ---- */
-    if (!d->dropdown_open) {
-        /* Uygula butonu */
-        widget_draw_button(win, 24, L_APPLY_Y, 200, 28,
-                           "Kaydet (grub.cfg i\x0Fin)",
-                           RGB(40, 100, 180), COLOR_WHITE);
+    /* Kaydet butonu */
+    bool has_disk = ata_get_drive_count() > 0;
+    uint32_t btn_bg = has_disk ? RGB(40, 100, 180) : RGB(60, 60, 80);
+    widget_draw_button(win, 24, L_APPLY_Y, 200, 28,
+                       "Diske Kaydet & Uygula",
+                       btn_bg, COLOR_WHITE);
 
-        /* Mesaj */
-        if (d->saved) {
-            widget_draw_label(win, 12, L_MSG_Y,
-                              "Kaydedildi!", RGB(100, 255, 100));
-            widget_draw_label(win, 12, L_GRUB1_Y,
-                              "grub.cfg'de \x03u sat\x01r\x01 de\x05i\x03tirin:",
-                              RGB(200, 200, 220));
+    if (!has_disk) {
+        widget_draw_label(win, 12, L_MSG_Y,
+                          "Disk yok! Kaydetme m\x07mk\x07n de\x05il.",
+                          RGB(255, 100, 100));
+        widget_draw_label(win, 12, L_GRUB_Y,
+                          "GRUB men\x07s\x07nden se\x0Fin.",
+                          RGB(150, 150, 180));
+        return;
+    }
 
-            /* grub satiri */
-            char grub_line[48];
-            uint32_t gp = 0;
-            const char* gpf = "set gfxmode=";
-            while (*gpf) grub_line[gp++] = *gpf++;
-            char rb[16];
-            res_to_str(res_options[d->selected].w,
-                       res_options[d->selected].h, rb);
-            for (uint32_t i = 0; rb[i]; i++) grub_line[gp++] = rb[i];
-            gpf = "x32";
-            while (*gpf) grub_line[gp++] = *gpf++;
-            grub_line[gp] = 0;
-
-            widget_draw_label(win, 20, L_GRUB2_Y, grub_line,
-                              RGB(255, 200, 100));
-
-            widget_draw_label(win, 12, L_GRUB3_Y,
-                              "Sonra yeniden derleyip boot edin.",
-                              RGB(150, 150, 180));
-        } else {
-            /* Aciklama */
-            widget_draw_label(win, 12, L_MSG_Y,
-                              "Not: VESA modu boot'ta ayarlan\x01r.",
-                              RGB(130, 130, 160));
-            widget_draw_label(win, 12, L_GRUB1_Y,
-                              "grub.cfg de\x05i\x03tirip yeniden",
-                              RGB(130, 130, 160));
-            widget_draw_label(win, 12, L_GRUB2_Y,
-                              "derlemeniz gerekir.",
-                              RGB(130, 130, 160));
-        }
+    if (d->saved) {
+        widget_draw_label(win, 12, L_MSG_Y,
+                          "Diske kaydedildi!", RGB(100, 255, 100));
+        /* grub talimat */
+        char gl[48]; uint32_t gp = 0;
+        const char* gpf = "GRUB'da se\x0Fin: WintakOS ";
+        while (*gpf) gl[gp++] = *gpf++;
+        char rb[16];
+        res_to_str(res_options[d->selected].w,
+                   res_options[d->selected].h, rb);
+        for (uint32_t i = 0; rb[i]; i++) gl[gp++] = rb[i];
+        gl[gp] = 0;
+        widget_draw_label(win, 12, L_GRUB_Y, gl, RGB(255, 200, 100));
+        widget_draw_label(win, 12, L_TIP_Y,
+                          "Yeniden ba\x03lat\x01n.",
+                          RGB(150, 150, 180));
+    } else {
+        widget_draw_label(win, 12, L_MSG_Y,
+                          "Se\x0Fip 'Kaydet' bas\x01n.",
+                          RGB(130, 130, 160));
     }
 }
 
@@ -330,63 +267,56 @@ static void disp_click(window_t* win, int32_t rx, int32_t ry)
     display_app_t* d = find_disp(win);
     if (!d) return;
 
-    /* ---- Dropdown acikken: liste tiklamasi ---- */
+    /* Dropdown acikken */
     if (d->dropdown_open) {
-        int32_t list_top = (int32_t)L_DROPDOWN_Y + (int32_t)L_DROPDOWN_H;
-        int32_t list_bot = list_top + (int32_t)(RES_COUNT * L_ITEM_H);
+        int32_t lt = (int32_t)L_DROPDOWN_Y + (int32_t)L_DROPDOWN_H;
+        int32_t lb = lt + (int32_t)(RES_COUNT * L_ITEM_H);
 
-        if (rx >= 24 && rx < 224 &&
-            ry >= list_top && ry < list_bot) {
-            /* Bir item secildi */
-            uint32_t idx = (uint32_t)(ry - list_top) / L_ITEM_H;
+        if (rx >= 24 && rx < 224 && ry >= lt && ry < lb) {
+            uint32_t idx = (uint32_t)(ry - lt) / L_ITEM_H;
             if (idx < RES_COUNT) {
                 d->selected = idx;
                 d->saved = false;
             }
         }
-        /* Her turlu kapat */
         d->dropdown_open = false;
         wm_set_dirty();
         return;
     }
 
-    /* ---- Dropdown buton tiklamasi ---- */
+    /* Dropdown buton */
     if (rx >= 24 && rx < 224 &&
         ry >= (int32_t)L_DROPDOWN_Y &&
         ry < (int32_t)(L_DROPDOWN_Y + L_DROPDOWN_H)) {
-        d->dropdown_open = !d->dropdown_open;
+        d->dropdown_open = true;
         wm_set_dirty();
         return;
     }
 
-    /* ---- Kaydet butonu ---- */
-    if (!d->dropdown_open &&
-        widget_button_hit(win, 24, L_APPLY_Y, 200, 28, rx, ry)) {
+    /* Kaydet butonu */
+    if (widget_button_hit(win, 24, L_APPLY_Y, 200, 28, rx, ry)) {
+        if (ata_get_drive_count() == 0) return;
 
-        /* display.cfg'ye yaz */
-        char cfg_data[64];
-        uint32_t p = 0;
+        disk_config_t cfg;
+        memset(&cfg, 0, sizeof(cfg));
+        cfg.magic = CONFIG_MAGIC;
+        cfg.version = CONFIG_VERSION;
+        cfg.pref_res_w = res_options[d->selected].w;
+        cfg.pref_res_h = res_options[d->selected].h;
 
-        /* Satir 1: cozunurluk */
-        char rb[16];
-        res_to_str(res_options[d->selected].w,
-                   res_options[d->selected].h, rb);
-        for (uint32_t i = 0; rb[i]; i++) cfg_data[p++] = rb[i];
-        cfg_data[p++] = '\n';
+        /* Mevcut setup bilgilerini de kaydet */
+        setup_config_t* scfg = setup_get_config();
+        cfg.theme = scfg->theme;
+        uint32_t ui = 0;
+        while (ui < 31 && scfg->username[ui]) {
+            cfg.username[ui] = scfg->username[ui];
+            ui++;
+        }
+        cfg.username[ui] = '\0';
 
-        /* Satir 2: grub satiri */
-        const char* gpf = "set gfxmode=";
-        while (*gpf) cfg_data[p++] = *gpf++;
-        for (uint32_t i = 0; rb[i]; i++) cfg_data[p++] = rb[i];
-        gpf = "x32\n";
-        while (*gpf) cfg_data[p++] = *gpf++;
-        cfg_data[p] = 0;
-
-        if (!ramfs_exists("display.cfg"))
-            ramfs_create("display.cfg", false);
-        ramfs_write("display.cfg", cfg_data, p);
-
-        d->saved = true;
+        if (disk_config_save(&cfg)) {
+            d->saved = true;
+        }
         wm_set_dirty();
     }
 }
@@ -399,7 +329,6 @@ display_app_t* display_create(int32_t x, int32_t y)
     d->dropdown_open = false;
     d->saved = false;
 
-    /* Mevcut cozunurlugu sec */
     framebuffer_t* fb = fb_get_info();
     for (uint32_t i = 0; i < RES_COUNT; i++) {
         if (res_options[i].w == fb->width &&
@@ -409,7 +338,7 @@ display_app_t* display_create(int32_t x, int32_t y)
         }
     }
 
-    d->win = wm_create_window(x, y, 280, 360,
+    d->win = wm_create_window(x, y, 280, 320,
                                "Ekran Ayarlar\x01", RGB(35, 35, 52));
     if (d->win) {
         d->win->on_draw = disp_draw;
