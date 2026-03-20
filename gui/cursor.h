@@ -6,11 +6,6 @@
 #define CURSOR_W  12
 #define CURSOR_H  19
 
-/* Cursor modlari */
-#define CURSOR_NORMAL  0
-#define CURSOR_BUSY    1
-#define CURSOR_DRAG    2
-
 /* 0=seffaf, 1=siyah, 2=beyaz */
 static const uint8_t cursor_bitmap[CURSOR_H][CURSOR_W] = {
     {1,0,0,0,0,0,0,0,0,0,0,0},
@@ -34,7 +29,7 @@ static const uint8_t cursor_bitmap[CURSOR_H][CURSOR_W] = {
     {0,0,0,0,0,0,0,1,1,0,0,0},
 };
 
-/* Surukleme cursor — 4 yonlu ok */
+/* Surukleme cursor */
 static const uint8_t cursor_drag_bitmap[CURSOR_H][CURSOR_W] = {
     {0,0,0,0,0,1,1,0,0,0,0,0},
     {0,0,0,0,1,2,2,1,0,0,0,0},
@@ -62,7 +57,6 @@ static const uint8_t cursor_drag_bitmap[CURSOR_H][CURSOR_W] = {
 #define BUSY_FRAMES 4
 
 static const uint8_t busy_bitmap[BUSY_FRAMES][BUSY_SIZE][BUSY_SIZE] = {
-    /* Frame 0 */
     {
         {1,1,1,1,1,1,1,1,1,1,1,1},
         {0,1,2,2,2,2,2,2,2,2,1,0},
@@ -77,7 +71,6 @@ static const uint8_t busy_bitmap[BUSY_FRAMES][BUSY_SIZE][BUSY_SIZE] = {
         {0,1,1,1,1,1,1,1,1,1,1,0},
         {1,1,1,1,1,1,1,1,1,1,1,1},
     },
-    /* Frame 1 */
     {
         {1,1,1,1,1,1,1,1,1,1,1,1},
         {0,1,2,2,2,2,2,2,2,2,1,0},
@@ -92,7 +85,6 @@ static const uint8_t busy_bitmap[BUSY_FRAMES][BUSY_SIZE][BUSY_SIZE] = {
         {0,1,1,1,1,1,1,1,1,1,1,0},
         {1,1,1,1,1,1,1,1,1,1,1,1},
     },
-    /* Frame 2 */
     {
         {1,1,1,1,1,1,1,1,1,1,1,1},
         {0,1,1,2,2,2,2,2,2,1,1,0},
@@ -107,7 +99,6 @@ static const uint8_t busy_bitmap[BUSY_FRAMES][BUSY_SIZE][BUSY_SIZE] = {
         {0,1,1,1,1,1,1,1,1,1,1,0},
         {1,1,1,1,1,1,1,1,1,1,1,1},
     },
-    /* Frame 3 */
     {
         {1,1,1,1,1,1,1,1,1,1,1,1},
         {0,1,1,1,2,2,2,2,1,1,1,0},
