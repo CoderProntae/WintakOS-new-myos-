@@ -1,5 +1,6 @@
 #include "ata.h"
 #include "../lib/string.h"
+#include "ahci.h"
 
 /* ---- Port I/O ---- */
 
@@ -281,6 +282,17 @@ void ata_init(void)
                 drive_count++;
         }
     }
+        /* IDE bulamadiysak AHCI dene */
+    if (drive_count == 0) {
+        if (ahci_init()) {
+            /* AHCI diskini drives[0]'a kopyala */
+            ata_drive_t* ad = ahci_get_info();
+            if (ad) {
+                memcpy(&drives[0], ad, sizeof(ata_drive_t));
+                drive_count = 1;
+            }
+        }
+    }
 }
 
 bool ata_is_present(uint8_t drive)
@@ -304,6 +316,11 @@ uint32_t ata_get_drive_count(void)
 bool ata_read_sectors(uint8_t drive, uint32_t lba,
                        uint8_t count, void* buf)
 {
+        /* AHCI backend */
+    if (drive >= ATA_MAX_DRIVES) return false;
+    if (drives[drive].channel == 2) {
+        return ahci_read_sectors(lba, count, buf);
+    }
     if (drive >= ATA_MAX_DRIVES) return false;
     ata_drive_t* d = &drives[drive];
     if (!d->present || !d->is_ata) return false;
@@ -342,6 +359,11 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba,
 bool ata_write_sectors(uint8_t drive, uint32_t lba,
                         uint8_t count, const void* buf)
 {
+        /* AHCI backend */
+    if (drive >= ATA_MAX_DRIVES) return false;
+    if (drives[drive].channel == 2) {
+        return ahci_write_sectors(lba, count, buf);
+    }
     if (drive >= ATA_MAX_DRIVES) return false;
     ata_drive_t* d = &drives[drive];
     if (!d->present || !d->is_ata) return false;
