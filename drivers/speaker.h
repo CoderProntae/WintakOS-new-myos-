@@ -3,7 +3,6 @@
 
 #include "../include/types.h"
 
-/* Muzik notalari (frekans Hz) */
 #define NOTE_NONE  0
 #define NOTE_C4    262
 #define NOTE_CS4   277
@@ -31,25 +30,24 @@
 #define NOTE_B5    988
 #define NOTE_C6    1047
 
-/* Temel fonksiyonlar */
+typedef struct {
+    uint16_t frequency;
+    uint16_t duration_ms;
+} note_t;
+
 void speaker_init(void);
 void speaker_play_tone(uint32_t frequency);
 void speaker_stop(void);
 void speaker_beep(uint32_t frequency, uint32_t duration_ms);
+void speaker_play_melody(const note_t* notes, uint32_t count);
 
-/* Sistem sesleri */
 void sound_startup(void);
 void sound_error(void);
 void sound_click(void);
 void sound_notify(void);
 void sound_close(void);
 
-/* Melodi calma */
-typedef struct {
-    uint16_t frequency;
-    uint16_t duration_ms;
-} note_t;
-
-void speaker_play_melody(const note_t* notes, uint32_t count);
+/* Ses sistemi bilgisi */
+const char* sound_get_driver_name(void);
 
 #endif
