@@ -46,4 +46,24 @@ bool          ata_write_sectors(uint8_t drive, uint32_t lba,
 bool disk_config_load(disk_config_t* cfg);
 bool disk_config_save(const disk_config_t* cfg);
 
+/* Debug icin port erisimi */
+static inline uint8_t ata_inb(uint16_t port)
+{
+    uint8_t ret;
+    __asm__ volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline void ata_outb(uint16_t port, uint8_t val)
+{
+    __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline uint16_t ata_inw(uint16_t port)
+{
+    uint16_t ret;
+    __asm__ volatile("inw %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
 #endif
