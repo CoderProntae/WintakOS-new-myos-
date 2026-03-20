@@ -39,6 +39,7 @@ C_SOURCES   := kernel/kernel.c \
                drivers/framebuffer.c \
                drivers/fbconsole.c \
                drivers/mouse.c \
+               drivers/speaker.c \
                memory/pmm.c \
                memory/heap.c \
                lib/string.c \
@@ -51,6 +52,7 @@ C_SOURCES   := kernel/kernel.c \
                apps/notepad.c \
                apps/sysmonitor.c \
                apps/filemanager.c \
+               apps/piano.c \
                fs/ramfs.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
@@ -64,7 +66,7 @@ ISO_DIR    := iso
 .PHONY: all clean run debug verify
 
 all: $(ISO_FILE)
-	@echo "  WintakOS Milestone 10 derlendi! ISO: $(ISO_FILE)"
+	@echo "  WintakOS Milestone 11 derlendi! ISO: $(ISO_FILE)"
 
 boot/boot.o: boot/boot.asm
 	@$(AS) $(ASFLAGS) $< -o $@
@@ -110,7 +112,7 @@ verify: $(KERNEL_BIN)
 	@grub-file --is-x86-multiboot2 $(KERNEL_BIN) && echo "Multiboot2 OK" || echo "FAIL"
 
 run: $(ISO_FILE)
-	@$(QEMU) -cdrom $(ISO_FILE) -m 512M
+	@$(QEMU) -cdrom $(ISO_FILE) -m 512M -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0
 
 debug: $(ISO_FILE)
 	@$(QEMU) -cdrom $(ISO_FILE) -m 512M -s -S
