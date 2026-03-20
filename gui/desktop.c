@@ -8,6 +8,7 @@
 #include "../cpu/rtc.h"
 #include "../apps/setup.h"
 #include "../lib/string.h"
+#include "../include/version.h"
 
 static uint32_t screen_w = 800;
 static uint32_t screen_h = 600;
@@ -125,7 +126,7 @@ static void draw_background(void)
         draw_string_px(screen_w / 2 - (p * 8) / 2, 30, msg,
                        RGB(220, 220, 255), text_bg);
     } else {
-        draw_string_px(screen_w / 2 - 60, 30, "WintakOS v0.8.0",
+        draw_string_px(screen_w / 2 - 72, 30, WINTAKOS_FULL,
                        RGB(200, 200, 255), text_bg);
     }
 }
@@ -202,7 +203,7 @@ static void draw_start_menu(void)
     fb_fill_rect(mx + START_MENU_W - 1, my, 1, START_MENU_H, RGB(60, 60, 100));
 
     fb_fill_rect(mx + 1, my + 1, START_MENU_W - 2, 24, RGB(40, 80, 170));
-    draw_string_px(mx + 8, my + 5, "WintakOS v0.8.0", COLOR_WHITE, RGB(40, 80, 170));
+    draw_string_px(mx + 8, my + 5, "WintakOS " WINTAKOS_VERSION, COLOR_WHITE, RGB(40, 80, 170));
 
     draw_string_px(mx + 12, my + 32, "Terminal", COLOR_WHITE, mbg);
     fb_fill_rect(mx + 1, my + 52, START_MENU_W - 2, 1, RGB(60, 60, 80));
