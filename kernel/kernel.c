@@ -67,11 +67,20 @@ static terminal_t*    main_terminal = NULL;
 static notepad_t*     main_notepad = NULL;
 static piano_t*       main_piano = NULL;
 
-/* Uygulama baslat — start menu ve masaustu ikonlari icin */
+/* Cift tik algilama — kernel seviyesinde */
+static uint32_t kern_last_click_tick = 0;
+static int32_t  kern_last_click_x = -100;
+static int32_t  kern_last_click_y = -100;
+#define KERN_DBLCLICK_TIME  30
+#define KERN_DBLCLICK_DIST  8
+
 static void app_launch(int id)
 {
+    /* Busy cursor goster */
+    desktop_set_cursor(CURSOR_BUSY);
+
     switch (id) {
-        case 0: /* Terminal */
+        case 0:
             if (!main_terminal ||
                 !(main_terminal->win->flags & WIN_FLAG_VISIBLE)) {
                 main_terminal = terminal_create(150, 20);
@@ -79,20 +88,20 @@ static void app_launch(int id)
                 wm_restore_window(main_terminal->win);
             }
             break;
-        case 1: /* Sistem Bilgisi */
+        case 1:
             sysmonitor_create(490, 250);
             break;
-        case 2: /* Ayarlar */
+        case 2:
             setup_run();
             desktop_apply_config();
             break;
-        case 3: /* Hesap Makinesi */
+        case 3:
             calculator_create(10, 60);
             break;
-        case 4: /* Dosya Yoneticisi */
+        case 4:
             filemanager_create(10, 310);
             break;
-        case 5: /* Not Defteri */
+        case 5:
             if (!main_notepad ||
                 !(main_notepad->win->flags & WIN_FLAG_VISIBLE)) {
                 main_notepad = notepad_create(490, 10);
@@ -100,7 +109,7 @@ static void app_launch(int id)
                 wm_restore_window(main_notepad->win);
             }
             break;
-        case 6: /* Piyano */
+        case 6:
             if (!main_piano ||
                 !(main_piano->win->flags & WIN_FLAG_VISIBLE)) {
                 main_piano = piano_create(200, 330);
@@ -108,7 +117,7 @@ static void app_launch(int id)
                 wm_restore_window(main_piano->win);
             }
             break;
-        case 7: /* Ag */
+        case 7:
             network_create(10, 160);
             break;
         default: break;
@@ -166,43 +175,52 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
 
     uint32_t piano_release_tick = 0;
     bool piano_key_held = false;
+    uint8_t prev_mouse_btn = 0;
 
     while (1) {
-        /* Start menu tiklama kontrolu */
-        if (desktop_start_menu_open()) {
-            mouse_state_t ms = mouse_get_state();
-            bool left_now = (ms.buttons & MOUSE_BTN_LEFT) != 0;
-            static bool sm_prev_left = false;
-            if (left_now && !sm_prev_left) {
-                int choice = desktop_start_menu_click(ms.x, ms.y);
-                if (choice >= 0) app_launch(choice);
-            }
-            sm_prev_left = left_now;
+        mouse_state_t ms = mouse_get_state();
+        bool left_now = (ms.buttons & MOUSE_BTN_LEFT) != 0;
+        bool left_pressed = left_now && !(prev_mouse_btn & MOUSE_BTN_LEFT);
+
+        /* Start menu */
+        if (left_pressed && desktop_start_menu_open()) {
+            int choice = desktop_start_menu_click(ms.x, ms.y);
+            if (choice >= 0) app_launch(choice);
         }
 
-        /* Masaustu ikon tiklama */
-        {
-            mouse_state_t ms = mouse_get_state();
-            static bool icon_prev_left = false;
-            bool left_now = (ms.buttons & MOUSE_BTN_LEFT) != 0;
-            if (left_now && !icon_prev_left && !desktop_start_menu_open()) {
-                uint32_t ty = fb_get_info()->height - 32;
-                if (ms.y < (int32_t)ty) {
-                    /* desktop_icon_click yapisi desktop.c icinde */
-                    /* Basit kontrol: sol ustteki ikon alani */
-                    /* Terminal ikonu: 30, 60 civari */
-                    if (ms.x >= 22 && ms.x < 70 && ms.y >= 56 && ms.y < 100)
-                        app_launch(0);
-                    /* Dosyalar ikonu: 30, 130 */
-                    else if (ms.x >= 22 && ms.x < 70 && ms.y >= 126 && ms.y < 170)
-                        app_launch(4);
-                    /* Ayarlar ikonu: 30, 200 */
-                    else if (ms.x >= 22 && ms.x < 70 && ms.y >= 196 && ms.y < 240)
-                        app_launch(2);
+        /* Masaustu ikon — cift tik algilama */
+        if (left_pressed && !desktop_start_menu_open()) {
+            uint32_t ty = fb_get_info()->height - TASKBAR_HEIGHT;
+            if (ms.y < (int32_t)ty) {
+                uint32_t now = pit_get_ticks();
+                bool is_dblclick = false;
+
+                if (now - kern_last_click_tick < KERN_DBLCLICK_TIME) {
+                    int32_t dx = ms.x - kern_last_click_x;
+                    int32_t dy = ms.y - kern_last_click_y;
+                    if (dx < 0) dx = -dx;
+                    if (dy < 0) dy = -dy;
+                    if (dx < KERN_DBLCLICK_DIST && dy < KERN_DBLCLICK_DIST)
+                        is_dblclick = true;
                 }
+
+                if (is_dblclick) {
+                    int app_id = desktop_icon_dblclick(ms.x, ms.y);
+                    if (app_id >= 0) {
+                        app_launch(app_id);
+                        kern_last_click_tick = 0;
+                    }
+                } else {
+                    desktop_icon_click(ms.x, ms.y);
+                }
+
+                kern_last_click_tick = pit_get_ticks();
+                kern_last_click_x = ms.x;
+                kern_last_click_y = ms.y;
             }
-            icon_prev_left = left_now;
         }
+
+        prev_mouse_btn = ms.buttons;
 
         /* Klavye girisi */
         uint8_t c = keyboard_getchar();
@@ -232,7 +250,6 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
             piano_key_held = false;
         }
 
-        /* Ozel tus olaylari */
         key_event_t ev;
         if (keyboard_poll(&ev) && !ev.released && ev.keycode != KEY_NONE) {
             window_t* aw = NULL;
