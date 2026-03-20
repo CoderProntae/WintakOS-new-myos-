@@ -58,6 +58,7 @@ C_SOURCES   := kernel/kernel.c \
                apps/piano.c \
                apps/network.c \
                fs/ramfs.c \
+               drivers/nic.c \
                net/net.c
 
 ASM_OBJECTS := $(ASM_SOURCES:.asm=.o)
