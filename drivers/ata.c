@@ -262,12 +262,27 @@ void ata_init(void)
     drive_count = 0;
 
     for (uint8_t ch = 0; ch < 2; ch++) {
-        /* Floating bus kontrolu — controller var mi? */
+        /* Floating bus kontrolu */
         uint8_t s = ata_inb(channel_base[ch] + ATA_REG_STATUS);
-        if (s == 0xFF) continue; /* controller yok */
+        if (s == 0xFF) {
+            /* Debug: channel yok */
+            continue;
+        }
 
-        /* Soft reset */
-        ata_soft_reset(ch);
+        /* Soft reset — DAHA GUVENLI versiyon */
+        ata_outb(channel_ctrl[ch], 0x04);
+        ata_io_wait(channel_ctrl[ch]);
+        ata_io_wait(channel_ctrl[ch]);
+        ata_io_wait(channel_ctrl[ch]);
+        ata_outb(channel_ctrl[ch], 0x00);   /* nIEN=0, interrupts aktif */
+        ata_io_wait(channel_ctrl[ch]);
+        ata_io_wait(channel_ctrl[ch]);
+
+        /* Reset sonrasi uzun bekle */
+        for (volatile uint32_t w = 0; w < 100000; w++);
+
+        /* BSY kalkmasi icin bekle */
+        ata_wait_bsy_clear(channel_base[ch], 1000000);
 
         for (uint8_t dr = 0; dr < 2; dr++) {
             uint8_t idx = ch * 2 + dr;
@@ -282,6 +297,18 @@ void ata_init(void)
                 drive_count++;
         }
     }
+
+    /* IDE bulamadiysak AHCI dene */
+    if (drive_count == 0) {
+        if (ahci_init()) {
+            ata_drive_t* ad = ahci_get_info();
+            if (ad) {
+                memcpy(&drives[0], ad, sizeof(ata_drive_t));
+                drive_count = 1;
+            }
+        }
+    }
+}
         /* IDE bulamadiysak AHCI dene */
     if (drive_count == 0) {
         if (ahci_init()) {
