@@ -27,7 +27,7 @@ static inline void ata_outw(uint16_t port, uint16_t val)
     __asm__ volatile("outw %0, %1" : : "a"(val), "Nd"(port));
 }
 
-/* ---- ATA Register Offsets ---- */
+/* ---- ATA Registers ---- */
 
 #define ATA_REG_DATA       0
 #define ATA_REG_ERROR      1
@@ -40,24 +40,17 @@ static inline void ata_outw(uint16_t port, uint16_t val)
 #define ATA_REG_STATUS     7
 #define ATA_REG_COMMAND    7
 
-/* Control ports */
-#define ATA_PRIMARY_CTRL   0x3F6
-#define ATA_SECONDARY_CTRL 0x376
-
-/* Status bits */
 #define ATA_SR_BSY   0x80
 #define ATA_SR_DRDY  0x40
 #define ATA_SR_DF    0x20
 #define ATA_SR_DRQ   0x08
 #define ATA_SR_ERR   0x01
 
-/* Commands */
 #define ATA_CMD_IDENTIFY   0xEC
 #define ATA_CMD_READ       0x20
 #define ATA_CMD_WRITE      0x30
 #define ATA_CMD_FLUSH      0xE7
 
-/* Controller base ports */
 static const uint16_t channel_base[2] = { 0x1F0, 0x170 };
 static const uint16_t channel_ctrl[2] = { 0x3F6, 0x376 };
 
@@ -66,18 +59,16 @@ static uint32_t    drive_count = 0;
 
 /* ---- Helpers ---- */
 
-static void ata_delay(uint16_t base)
+static void ata_io_wait(uint16_t ctrl)
 {
-    /* 400ns bekle — status portunu 4 kez oku */
-    ata_inb(base + ATA_REG_STATUS);
-    ata_inb(base + ATA_REG_STATUS);
-    ata_inb(base + ATA_REG_STATUS);
-    ata_inb(base + ATA_REG_STATUS);
+    ata_inb(ctrl);
+    ata_inb(ctrl);
+    ata_inb(ctrl);
+    ata_inb(ctrl);
 }
 
-static bool ata_wait_ready(uint16_t base)
+static bool ata_wait_bsy_clear(uint16_t base, uint32_t timeout)
 {
-    uint32_t timeout = 500000;
     while (timeout > 0) {
         uint8_t s = ata_inb(base + ATA_REG_STATUS);
         if (!(s & ATA_SR_BSY)) return true;
@@ -86,9 +77,8 @@ static bool ata_wait_ready(uint16_t base)
     return false;
 }
 
-static bool ata_wait_drq(uint16_t base)
+static bool ata_wait_drq(uint16_t base, uint32_t timeout)
 {
-    uint32_t timeout = 500000;
     while (timeout > 0) {
         uint8_t s = ata_inb(base + ATA_REG_STATUS);
         if (s & ATA_SR_ERR) return false;
@@ -99,17 +89,47 @@ static bool ata_wait_drq(uint16_t base)
     return false;
 }
 
+static void ata_soft_reset(uint8_t ch)
+{
+    ata_outb(channel_ctrl[ch], 0x04);  /* SRST set */
+    ata_io_wait(channel_ctrl[ch]);
+    ata_io_wait(channel_ctrl[ch]);
+    ata_outb(channel_ctrl[ch], 0x02);  /* SRST clear, nIEN set */
+    ata_io_wait(channel_ctrl[ch]);
+
+    /* BSY kalkmasi icin bekle — uzun timeout */
+    ata_wait_bsy_clear(channel_base[ch], 1000000);
+}
+
 /* ---- IDENTIFY ---- */
 
 static void ata_identify(uint8_t idx)
 {
     ata_drive_t* d = &drives[idx];
     uint16_t base = d->base_port;
+    uint16_t ctrl = channel_ctrl[d->channel];
     uint8_t sel = (d->drive_num == 0) ? 0xA0 : 0xB0;
 
     /* Drive sec */
     ata_outb(base + ATA_REG_DRIVE, sel);
-    ata_delay(base);
+    ata_io_wait(ctrl);
+
+    /* Floating bus kontrolu */
+    uint8_t status = ata_inb(base + ATA_REG_STATUS);
+    if (status == 0xFF || status == 0x7F) {
+        d->present = false;
+        return;
+    }
+
+    /* BSY bekle */
+    if (!ata_wait_bsy_clear(base, 100000)) {
+        d->present = false;
+        return;
+    }
+
+    /* Drive tekrar sec (BSY sonrasi) */
+    ata_outb(base + ATA_REG_DRIVE, sel);
+    ata_io_wait(ctrl);
 
     /* Registerleri sifirla */
     ata_outb(base + ATA_REG_SECCOUNT, 0);
@@ -119,24 +139,48 @@ static void ata_identify(uint8_t idx)
 
     /* IDENTIFY gonder */
     ata_outb(base + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
-    ata_delay(base);
+    ata_io_wait(ctrl);
 
-    uint8_t status = ata_inb(base + ATA_REG_STATUS);
+    /* Status kontrol */
+    status = ata_inb(base + ATA_REG_STATUS);
     if (status == 0) {
+        /* Hic cevap yok — drive yok */
         d->present = false;
         return;
     }
 
-    /* BSY bekle */
-    if (!ata_wait_ready(base)) {
+    /* BSY kalkmasi bekle */
+    if (!ata_wait_bsy_clear(base, 500000)) {
         d->present = false;
         return;
     }
 
-    /* ATAPI kontrol — LBA mid/hi sifir degilse ATA degil */
+    /* ATAPI/SATA kontrolu — LBA mid/hi sifir degilse ATA degil */
     uint8_t lba_mid = ata_inb(base + ATA_REG_LBA_MID);
     uint8_t lba_hi  = ata_inb(base + ATA_REG_LBA_HI);
+
+    if (lba_mid == 0x14 && lba_hi == 0xEB) {
+        /* ATAPI device */
+        d->present = true;
+        d->is_ata = false;
+        d->sectors = 0;
+        d->size_mb = 0;
+        memset(d->model, 0, sizeof(d->model));
+        memset(d->serial, 0, sizeof(d->serial));
+
+        /* Model icin ATAPI IDENTIFY calis */
+        const char* atapi_name = "ATAPI Device";
+        uint32_t ai = 0;
+        while (atapi_name[ai]) {
+            d->model[ai] = atapi_name[ai];
+            ai++;
+        }
+        d->model[ai] = '\0';
+        return;
+    }
+
     if (lba_mid != 0 || lba_hi != 0) {
+        /* Bilinmeyen device tipi */
         d->present = true;
         d->is_ata = false;
         d->sectors = 0;
@@ -146,8 +190,15 @@ static void ata_identify(uint8_t idx)
         return;
     }
 
+    /* ERR kontrolu */
+    status = ata_inb(base + ATA_REG_STATUS);
+    if (status & ATA_SR_ERR) {
+        d->present = false;
+        return;
+    }
+
     /* DRQ bekle */
-    if (!ata_wait_drq(base)) {
+    if (!ata_wait_drq(base, 500000)) {
         d->present = false;
         return;
     }
@@ -166,7 +217,7 @@ static void ata_identify(uint8_t idx)
         d->model[i * 2 + 1] = (char)(ident[27 + i] & 0xFF);
     }
     d->model[40] = '\0';
-    /* Bosluk temizle */
+    /* Sondaki bosluklari temizle */
     for (int i = 39; i >= 0; i--) {
         if (d->model[i] == ' ' || d->model[i] == '\0')
             d->model[i] = '\0';
@@ -189,7 +240,17 @@ static void ata_identify(uint8_t idx)
 
     /* Toplam sektor — LBA28 (word 60-61) */
     d->sectors = (uint32_t)ident[60] | ((uint32_t)ident[61] << 16);
-    d->size_mb = d->sectors / 2048; /* 512 * 2048 = 1MB */
+    if (d->sectors == 0) {
+        /* Bazi diskler sadece LBA48 destekler — word 100-103 */
+        d->sectors = (uint32_t)ident[100] | ((uint32_t)ident[101] << 16);
+    }
+    d->size_mb = d->sectors / 2048;
+
+    /* Cok kucuk disklerde hata olabilir */
+    if (d->sectors < 16) {
+        d->present = false;
+        d->is_ata = false;
+    }
 }
 
 /* ---- Public API ---- */
@@ -200,6 +261,13 @@ void ata_init(void)
     drive_count = 0;
 
     for (uint8_t ch = 0; ch < 2; ch++) {
+        /* Floating bus kontrolu — controller var mi? */
+        uint8_t s = ata_inb(channel_base[ch] + ATA_REG_STATUS);
+        if (s == 0xFF) continue; /* controller yok */
+
+        /* Soft reset */
+        ata_soft_reset(ch);
+
         for (uint8_t dr = 0; dr < 2; dr++) {
             uint8_t idx = ch * 2 + dr;
             drives[idx].base_port = channel_base[ch];
@@ -207,16 +275,6 @@ void ata_init(void)
             drives[idx].channel = ch;
             drives[idx].present = false;
             drives[idx].is_ata = false;
-
-            /* Oncelik: floating bus kontrolu */
-            uint8_t s = ata_inb(channel_base[ch] + ATA_REG_STATUS);
-            if (s == 0xFF) continue; /* controller yok */
-
-            /* Software reset */
-            ata_outb(channel_ctrl[ch], 0x04);
-            ata_delay(channel_base[ch]);
-            ata_outb(channel_ctrl[ch], 0x00);
-            ata_delay(channel_base[ch]);
 
             ata_identify(idx);
             if (drives[idx].present)
@@ -252,14 +310,15 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba,
     if (count == 0) return false;
 
     uint16_t base = d->base_port;
+    uint16_t ctrl = channel_ctrl[d->channel];
     uint8_t head = (d->drive_num == 0) ? 0xE0 : 0xF0;
 
-    if (!ata_wait_ready(base)) return false;
+    if (!ata_wait_bsy_clear(base, 500000)) return false;
 
-    /* Drive + LBA mode + LBA bits 24-27 */
     ata_outb(base + ATA_REG_DRIVE, head | ((lba >> 24) & 0x0F));
-    ata_delay(base);
+    ata_io_wait(ctrl);
 
+    ata_outb(base + ATA_REG_FEATURES, 0x00);
     ata_outb(base + ATA_REG_SECCOUNT, count);
     ata_outb(base + ATA_REG_LBA_LO, (uint8_t)(lba & 0xFF));
     ata_outb(base + ATA_REG_LBA_MID, (uint8_t)((lba >> 8) & 0xFF));
@@ -269,7 +328,10 @@ bool ata_read_sectors(uint8_t drive, uint32_t lba,
 
     uint16_t* wbuf = (uint16_t*)buf;
     for (uint8_t s = 0; s < count; s++) {
-        if (!ata_wait_drq(base)) return false;
+        ata_io_wait(ctrl);
+        if (!ata_wait_bsy_clear(base, 500000)) return false;
+        if (!ata_wait_drq(base, 500000)) return false;
+
         for (int i = 0; i < 256; i++)
             wbuf[s * 256 + i] = ata_inw(base + ATA_REG_DATA);
     }
@@ -286,13 +348,15 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba,
     if (count == 0) return false;
 
     uint16_t base = d->base_port;
+    uint16_t ctrl = channel_ctrl[d->channel];
     uint8_t head = (d->drive_num == 0) ? 0xE0 : 0xF0;
 
-    if (!ata_wait_ready(base)) return false;
+    if (!ata_wait_bsy_clear(base, 500000)) return false;
 
     ata_outb(base + ATA_REG_DRIVE, head | ((lba >> 24) & 0x0F));
-    ata_delay(base);
+    ata_io_wait(ctrl);
 
+    ata_outb(base + ATA_REG_FEATURES, 0x00);
     ata_outb(base + ATA_REG_SECCOUNT, count);
     ata_outb(base + ATA_REG_LBA_LO, (uint8_t)(lba & 0xFF));
     ata_outb(base + ATA_REG_LBA_MID, (uint8_t)((lba >> 8) & 0xFF));
@@ -302,13 +366,16 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba,
 
     const uint16_t* wbuf = (const uint16_t*)buf;
     for (uint8_t s = 0; s < count; s++) {
-        if (!ata_wait_drq(base)) return false;
+        ata_io_wait(ctrl);
+        if (!ata_wait_bsy_clear(base, 500000)) return false;
+        if (!ata_wait_drq(base, 500000)) return false;
+
         for (int i = 0; i < 256; i++)
             ata_outw(base + ATA_REG_DATA, wbuf[s * 256 + i]);
 
         /* Flush */
         ata_outb(base + ATA_REG_COMMAND, ATA_CMD_FLUSH);
-        if (!ata_wait_ready(base)) return false;
+        if (!ata_wait_bsy_clear(base, 500000)) return false;
     }
 
     return true;
@@ -318,7 +385,6 @@ bool ata_write_sectors(uint8_t drive, uint32_t lba,
 
 bool disk_config_load(disk_config_t* cfg)
 {
-    /* Ilk ATA diski bul */
     for (uint8_t i = 0; i < ATA_MAX_DRIVES; i++) {
         if (!ata_is_present(i)) continue;
 
