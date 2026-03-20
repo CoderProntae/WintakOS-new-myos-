@@ -2,13 +2,13 @@
 #include "../gui/widget.h"
 #include "../drivers/framebuffer.h"
 #include "../drivers/font8x16.h"
+#include "../drivers/speaker.h"
 #include "../cpu/pit.h"
 #include "../cpu/rtc.h"
 #include "../memory/pmm.h"
 #include "../memory/heap.h"
 #include "../fs/ramfs.h"
 #include "../lib/string.h"
-#include "../drivers/speaker.h"
 
 static sysmonitor_t monitors[2];
 static uint32_t mon_count = 0;
@@ -36,25 +36,18 @@ static void build_line(char* buf, const char* label, uint32_t val, const char* u
 
 static void sysmon_draw(window_t* win)
 {
-    sysmonitor_t* mon = NULL;
-    for (uint32_t i = 0; i < mon_count; i++)
-        if (monitors[i].win == win) { mon = &monitors[i]; break; }
-    if (!mon) return;
-
     char buf[48];
     uint32_t total_mb = pmm_get_total_mb();
     uint32_t used_pages = pmm_get_used_pages();
     uint32_t free_pages = pmm_get_free_pages();
     uint32_t total_pages = pmm_get_total_pages();
-    uint32_t heap_free = heap_get_free();
-    uint32_t heap_used = heap_get_used();
+    uint32_t heap_free_val = heap_get_free();
+    uint32_t heap_used_val = heap_get_used();
     uint32_t uptime = pit_get_ticks() / PIT_FREQUENCY;
-    uint32_t files = ramfs_file_count();
+    uint32_t file_count = ramfs_file_count();
 
-    /* Baslik */
     widget_draw_label(win, 12, 8, "=== Sistem Monit\x0Cr\x07 ===", RGB(100, 200, 255));
 
-    /* RAM */
     widget_draw_label(win, 12, 32, "Fiziksel Bellek:", RGB(200, 200, 200));
     build_line(buf, "  Toplam: ", total_mb, " MB");
     widget_draw_label(win, 12, 50, buf, RGB(180, 180, 180));
@@ -67,26 +60,24 @@ static void sysmon_draw(window_t* win)
     build_line(buf, "  Bo\x03:       ", free_pages, " sayfa");
     widget_draw_label(win, 12, 104, buf, RGB(180, 180, 180));
 
-    /* Heap */
     widget_draw_label(win, 12, 128, "Kernel Heap:", RGB(200, 200, 200));
-    uint32_t heap_total = heap_free + heap_used;
-    uint32_t heap_pct = heap_total > 0 ? (heap_used * 100) / heap_total : 0;
+    uint32_t heap_total = heap_free_val + heap_used_val;
+    uint32_t heap_pct = heap_total > 0 ? (heap_used_val * 100) / heap_total : 0;
     widget_draw_progress(win, 12, 146, 260, 14, heap_pct, RGB(200, 140, 40), RGB(40, 40, 60));
 
-    build_line(buf, "  Kullan\x01lan: ", heap_used, " byte");
+    build_line(buf, "  Kullan\x01lan: ", heap_used_val, " byte");
     widget_draw_label(win, 12, 164, buf, RGB(180, 180, 180));
-    build_line(buf, "  Bo\x03:       ", heap_free, " byte");
+    build_line(buf, "  Bo\x03:       ", heap_free_val, " byte");
     widget_draw_label(win, 12, 182, buf, RGB(180, 180, 180));
 
-    /* Sistem */
     widget_draw_label(win, 12, 206, "Sistem:", RGB(200, 200, 200));
 
     uint32_t h = uptime / 3600;
     uint32_t m = (uptime % 3600) / 60;
     uint32_t s = uptime % 60;
-    char tbuf[20];
+    char tbuf[32];
     uint32_t tp = 0;
-    const char* pf = "  \x10" "al\x01\x03ma: ";
+    const char* pf = "  S\x07re: ";
     while (*pf) tbuf[tp++] = *pf++;
     tbuf[tp++] = '0' + (char)(h / 10);
     tbuf[tp++] = '0' + (char)(h % 10);
@@ -99,28 +90,18 @@ static void sysmon_draw(window_t* win)
     tbuf[tp] = 0;
     widget_draw_label(win, 12, 224, tbuf, RGB(180, 180, 180));
 
-    /* Ses */
+    build_line(buf, "  Dosya: ", file_count, "");
+    widget_draw_label(win, 12, 242, buf, RGB(180, 180, 180));
+
     build_line(buf, "  Ses: ", 0, "");
-    widget_draw_label(win, 12, 260, "  Ses: ", RGB(180, 180, 180));
-    /* Driver ismini ayri yaz */
-    {
-        const char* drv = sound_get_driver_name();
-        int32_t px = win->x + 12 + 7 * 8;
-        int32_t py = win->y + 260;
-        if (px > 0 && py > 0) {
-            while (*drv) {
-                const uint8_t* glyph = font8x16_data[(uint8_t)*drv];
-                for (uint32_t gy = 0; gy < 16; gy++) {
-                    uint8_t line = glyph[gy];
-                    for (uint32_t gx = 0; gx < 8; gx++)
-                        fb_put_pixel((uint32_t)px + gx, (uint32_t)py + gy,
-                            (line & (0x80 >> gx)) ? RGB(180, 180, 180) : win->bg_color);
-                }
-                px += 8;
-                drv++;
-            }
-        }
-    }
+    /* Ses driver adini elle yaz */
+    const char* drv = sound_get_driver_name();
+    uint32_t dp = 0;
+    const char* sp = "  Ses: ";
+    while (*sp) buf[dp++] = *sp++;
+    while (*drv) buf[dp++] = *drv++;
+    buf[dp] = 0;
+    widget_draw_label(win, 12, 260, buf, RGB(180, 180, 180));
 }
 
 sysmonitor_t* sysmonitor_create(int32_t x, int32_t y)
