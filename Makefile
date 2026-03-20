@@ -57,6 +57,7 @@ C_SOURCES   := kernel/kernel.c \
                apps/filemanager.c \
                apps/piano.c \
                apps/network.c \
+               apps/resolution.c \
                fs/ramfs.c \
                drivers/nic.c \
                drivers/virtio_net.c \
