@@ -446,98 +446,207 @@ static void term_execute(terminal_t* term)
         }
     }
     else if (str_eq(term->cmd, "diskinfo")) {
-        terminal_print_color(term, "=== Disk Bilgisi ===", RGB(100, 200, 255));
-        uint32_t dc = ata_get_drive_count();
+        terminal_print_color(term, "=== Disk Debug ===", RGB(100, 200, 255));
 
-        /* Debug: tum portlari kontrol et */
-        {
-            char dbuf[48];
-            uint32_t dp;
+        char dbuf[64];
+        uint32_t dp;
+        const char hex[] = "0123456789ABCDEF";
 
-            /* Primary status */
-            dp = 0;
-            const char* pf = "IDE Primary (0x1F0): 0x";
-            while (*pf) dbuf[dp++] = *pf++;
-            uint8_t ps;
-            __asm__ volatile("inb %1, %0" : "=a"(ps) : "Nd"((uint16_t)0x1F7));
-            const char hex[] = "0123456789ABCDEF";
-            dbuf[dp++] = hex[ps >> 4];
-            dbuf[dp++] = hex[ps & 0x0F];
-            dbuf[dp] = 0;
-            terminal_print(term, dbuf);
+        /* Her kanal ve drive icin tek tek debug */
+        uint16_t bases[2] = { 0x1F0, 0x170 };
+        uint16_t ctrls[2] = { 0x3F6, 0x376 };
+        const char* ch_names[2] = { "Primary", "Secondary" };
 
-            /* Secondary status */
-            dp = 0;
-            pf = "IDE Secondary (0x170): 0x";
-            while (*pf) dbuf[dp++] = *pf++;
-            __asm__ volatile("inb %1, %0" : "=a"(ps) : "Nd"((uint16_t)0x177));
-            dbuf[dp++] = hex[ps >> 4];
-            dbuf[dp++] = hex[ps & 0x0F];
-            dbuf[dp] = 0;
-            terminal_print(term, dbuf);
+        for (int ch = 0; ch < 2; ch++) {
+            for (int dr = 0; dr < 2; dr++) {
+                dp = 0;
+                /* Kanal ve drive adi */
+                const char* cn = ch_names[ch];
+                while (*cn) dbuf[dp++] = *cn++;
+                dbuf[dp++] = ' ';
+                const char* dn = dr == 0 ? "Master" : "Slave";
+                while (*dn) dbuf[dp++] = *dn++;
+                dbuf[dp++] = ':';
+                dbuf[dp] = 0;
+                terminal_print_color(term, dbuf, RGB(200, 200, 100));
 
-            /* PCI disk controller ara */
-            dp = 0;
-            pf = "PCI IDE class 01h01h: ";
-            while (*pf) dbuf[dp++] = *pf++;
-            pci_device_t pdev;
-            if (pci_find_device(0x01, 0x01, &pdev)) {
-                pf = "BULUNDU";
+                uint16_t base = bases[ch];
+                uint16_t ctrl = ctrls[ch];
+                uint8_t sel = (dr == 0) ? 0xA0 : 0xB0;
+                uint8_t status;
+
+                /* 1. Floating bus */
+                status = ata_inb(base + 7);
+                dp = 0;
+                const char* pf = "  Status: 0x";
                 while (*pf) dbuf[dp++] = *pf++;
-            } else {
-                pf = "YOK";
+                dbuf[dp++] = hex[status >> 4];
+                dbuf[dp++] = hex[status & 0x0F];
+                dbuf[dp] = 0;
+                terminal_print(term, dbuf);
+
+                if (status == 0xFF) {
+                    terminal_print(term, "  -> Floating bus, atla");
+                    continue;
+                }
+
+                /* 2. Drive sec */
+                ata_outb(base + 6, sel);
+                for (volatile uint32_t w = 0; w < 50000; w++);
+
+                status = ata_inb(base + 7);
+                dp = 0;
+                pf = "  Secim sonrasi: 0x";
                 while (*pf) dbuf[dp++] = *pf++;
+                dbuf[dp++] = hex[status >> 4];
+                dbuf[dp++] = hex[status & 0x0F];
+                dbuf[dp] = 0;
+                terminal_print(term, dbuf);
+
+                /* 3. IDENTIFY gonder */
+                ata_outb(base + 2, 0);
+                ata_outb(base + 3, 0);
+                ata_outb(base + 4, 0);
+                ata_outb(base + 5, 0);
+                ata_outb(base + 7, 0xEC);
+
+                /* Kisa bekle */
+                ata_inb(ctrl); ata_inb(ctrl);
+                ata_inb(ctrl); ata_inb(ctrl);
+                for (volatile uint32_t w = 0; w < 50000; w++);
+
+                /* 4. IDENTIFY sonrasi status */
+                status = ata_inb(base + 7);
+                dp = 0;
+                pf = "  IDENTIFY sonrasi: 0x";
+                while (*pf) dbuf[dp++] = *pf++;
+                dbuf[dp++] = hex[status >> 4];
+                dbuf[dp++] = hex[status & 0x0F];
+                dbuf[dp] = 0;
+                terminal_print(term, dbuf);
+
+                if (status == 0) {
+                    terminal_print(term, "  -> Cevap yok");
+                    continue;
+                }
+
+                /* 5. BSY bekle */
+                uint32_t bsy_count = 0;
+                for (uint32_t t = 0; t < 500000; t++) {
+                    status = ata_inb(base + 7);
+                    if (!(status & 0x80)) break;
+                    bsy_count++;
+                }
+
+                dp = 0;
+                pf = "  BSY sonrasi: 0x";
+                while (*pf) dbuf[dp++] = *pf++;
+                dbuf[dp++] = hex[status >> 4];
+                dbuf[dp++] = hex[status & 0x0F];
+                dbuf[dp] = 0;
+                terminal_print(term, dbuf);
+
+                /* 6. LBA mid/hi — device type */
+                uint8_t lm = ata_inb(base + 4);
+                uint8_t lh = ata_inb(base + 5);
+                dp = 0;
+                pf = "  LBA mid/hi: 0x";
+                while (*pf) dbuf[dp++] = *pf++;
+                dbuf[dp++] = hex[lm >> 4];
+                dbuf[dp++] = hex[lm & 0x0F];
+                dbuf[dp++] = '/';
+                dbuf[dp++] = '0';
+                dbuf[dp++] = 'x';
+                dbuf[dp++] = hex[lh >> 4];
+                dbuf[dp++] = hex[lh & 0x0F];
+                dbuf[dp] = 0;
+                terminal_print(term, dbuf);
+
+                if (lm == 0x14 && lh == 0xEB) {
+                    terminal_print_color(term, "  -> ATAPI cihaz",
+                                         RGB(255, 200, 100));
+                    continue;
+                }
+                if (lm == 0x69 && lh == 0x96) {
+                    terminal_print_color(term, "  -> SATA ATAPI",
+                                         RGB(255, 200, 100));
+                    continue;
+                }
+                if (lm == 0x3C && lh == 0xC3) {
+                    terminal_print_color(term, "  -> SATA ATA",
+                                         RGB(100, 255, 100));
+                }
+                if (lm == 0 && lh == 0) {
+                    terminal_print_color(term, "  -> ATA cihaz",
+                                         RGB(100, 255, 100));
+                }
+
+                /* 7. ERR/DRQ kontrol */
+                if (status & 0x01) {
+                    terminal_print_color(term, "  -> ERR flag!",
+                                         RGB(255, 100, 100));
+                    continue;
+                }
+
+                if (status & 0x08) {
+                    terminal_print_color(term, "  -> DRQ hazir, veri okunabilir",
+                                         RGB(100, 255, 100));
+
+                    /* Veriyi oku */
+                    uint16_t ident[256];
+                    for (int i = 0; i < 256; i++)
+                        ident[i] = ata_inw(base + 0);
+
+                    /* Model */
+                    char model[41];
+                    for (int i = 0; i < 20; i++) {
+                        model[i*2]   = (char)(ident[27+i] >> 8);
+                        model[i*2+1] = (char)(ident[27+i] & 0xFF);
+                    }
+                    model[40] = '\0';
+                    for (int i = 39; i >= 0; i--) {
+                        if (model[i]==' ' || model[i]=='\0')
+                            model[i] = '\0';
+                        else break;
+                    }
+
+                    dp = 0;
+                    pf = "  Model: ";
+                    while (*pf) dbuf[dp++] = *pf++;
+                    for (int i = 0; model[i] && dp < 58; i++)
+                        dbuf[dp++] = model[i];
+                    dbuf[dp] = 0;
+                    terminal_print_color(term, dbuf, RGB(100, 255, 100));
+
+                    /* Sectors */
+                    uint32_t secs = (uint32_t)ident[60] |
+                                    ((uint32_t)ident[61] << 16);
+                    uint32_t mb = secs / 2048;
+                    dp = 0;
+                    pf = "  Boyut: ";
+                    while (*pf) dbuf[dp++] = *pf++;
+                    char nbuf[12];
+                    uint_to_str(mb, nbuf, 12);
+                    for (uint32_t j = 0; nbuf[j]; j++) dbuf[dp++] = nbuf[j];
+                    pf = " MB";
+                    while (*pf) dbuf[dp++] = *pf++;
+                    dbuf[dp] = 0;
+                    terminal_print_color(term, dbuf, RGB(100, 255, 100));
+                } else {
+                    terminal_print_color(term, "  -> DRQ yok, veri alinamadi",
+                                         RGB(255, 100, 100));
+                }
             }
-            dbuf[dp] = 0;
-            terminal_print(term, dbuf);
-
-            /* PCI AHCI controller */
-            dp = 0;
-            pf = "PCI AHCI class 01h06h: ";
-            while (*pf) dbuf[dp++] = *pf++;
-            if (pci_find_device(0x01, 0x06, &pdev)) {
-                pf = "BULUNDU";
-                while (*pf) dbuf[dp++] = *pf++;
-            } else {
-                pf = "YOK";
-                while (*pf) dbuf[dp++] = *pf++;
-            }
-            dbuf[dp] = 0;
-            terminal_print(term, dbuf);
         }
 
-        if (dc == 0) {
-            terminal_print_color(term, "Disk bulunamad\x01.", RGB(255, 100, 100));
+        /* AHCI debug */
+        terminal_print(term, "");
+        pci_device_t pdev;
+        if (pci_find_device(0x01, 0x06, &pdev)) {
+            terminal_print_color(term, "AHCI controller bulundu",
+                                 RGB(100, 255, 100));
         } else {
-            char buf[64]; char nbuf[12];
-            for (uint8_t i = 0; i < ATA_MAX_DRIVES; i++) {
-                ata_drive_t* d = ata_get_info(i);
-                if (!d || !d->present) continue;
-                uint32_t p = 0;
-                buf[p++] = 'd'; buf[p++] = 'i'; buf[p++] = 's';
-                buf[p++] = 'k'; buf[p++] = '0' + i; buf[p++] = ':';
-                buf[p++] = ' ';
-                if (d->is_ata) {
-                    const char* m = d->model;
-                    while (*m && p < 50) buf[p++] = *m++;
-                } else {
-                    const char* at = "ATAPI";
-                    while (*at) buf[p++] = *at++;
-                }
-                buf[p] = 0;
-                terminal_print(term, buf);
-                if (d->is_ata && d->size_mb > 0) {
-                    p = 0;
-                    const char* ppf = "  Boyut: ";
-                    while (*ppf) buf[p++] = *ppf++;
-                    uint_to_str(d->size_mb, nbuf, 12);
-                    for (uint32_t j = 0; nbuf[j]; j++) buf[p++] = nbuf[j];
-                    ppf = " MB";
-                    while (*ppf) buf[p++] = *ppf++;
-                    buf[p] = 0;
-                    terminal_print(term, buf);
-                }
-            }
+            terminal_print(term, "AHCI controller yok");
         }
     }
     else if (str_eq(term->cmd, "lsblk")) {
