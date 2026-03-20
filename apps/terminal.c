@@ -26,6 +26,25 @@ static uint32_t term_count = 0;
 /* Scrollbar genisligi — icerik alani buna gore daraltilir */
 #define TERM_SCROLLBAR_W 14
 
+static inline uint8_t dbg_inb(uint16_t port)
+{
+    uint8_t ret;
+    __asm__ volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
+static inline void dbg_outb(uint16_t port, uint8_t val)
+{
+    __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
+}
+
+static inline uint16_t dbg_inw(uint16_t port)
+{
+    uint16_t ret;
+    __asm__ volatile("inw %1, %0" : "=a"(ret) : "Nd"(port));
+    return ret;
+}
+
 static void draw_char_at(uint32_t px, uint32_t py, uint8_t c,
                           uint32_t fg, uint32_t bg)
 {
