@@ -48,7 +48,7 @@ void speaker_init(void)
 void speaker_play_tone(uint32_t frequency)
 {
     if (use_ac97) ac97_play_tone(frequency);
-    pcspk_play(frequency);
+    else pcspk_play(frequency);
 }
 
 void speaker_stop(void)
@@ -73,47 +73,49 @@ void speaker_play_melody(const note_t* notes, uint32_t count)
         } else {
             speaker_beep(notes[i].frequency, notes[i].duration_ms);
         }
-        delay_ms(20);
+        delay_ms(15);
     }
 }
 
+/* Baslangic melodisi — kisa ve hosca */
 void sound_startup(void)
 {
     static const note_t m[] = {
-        {NOTE_C5, 100}, {NOTE_E5, 100}, {NOTE_G5, 100}, {NOTE_C6, 200}
-    };
-    speaker_play_melody(m, 4);
-}
-
-void sound_error(void)
-{
-    static const note_t m[] = {
-        {NOTE_A4, 150}, {NOTE_NONE, 50}, {NOTE_A4, 150}
+        {NOTE_E5,  80},
+        {NOTE_G5,  80},
+        {NOTE_C6, 150},
     };
     speaker_play_melody(m, 3);
 }
 
+void sound_error(void)
+{
+    speaker_beep(NOTE_A4, 120);
+    delay_ms(40);
+    speaker_beep(NOTE_A4, 120);
+}
+
 void sound_click(void)
 {
-    speaker_beep(800, 10);
+    speaker_beep(1200, 5);
 }
 
 void sound_notify(void)
 {
-    static const note_t m[] = { {NOTE_E5, 80}, {NOTE_G5, 120} };
+    static const note_t m[] = { {NOTE_E5, 60}, {NOTE_G5, 90} };
     speaker_play_melody(m, 2);
 }
 
 void sound_close(void)
 {
     static const note_t m[] = {
-        {NOTE_G5, 60}, {NOTE_E5, 60}, {NOTE_C5, 80}
+        {NOTE_G5, 50}, {NOTE_E5, 50}, {NOTE_C5, 70}
     };
     speaker_play_melody(m, 3);
 }
 
 const char* sound_get_driver_name(void)
 {
-    if (use_ac97) return "AC'97 + PC Speaker";
+    if (use_ac97) return "AC'97";
     return "PC Speaker";
 }
