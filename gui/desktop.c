@@ -396,7 +396,7 @@ static void draw_start_menu(void)
 
     const char* items[] = {
         "Terminal", "Sistem Bilgisi", "Ayarlar",
-        "Hesap Makinesi", "Dosya Y\x08neticisi", "Ekran Bilgisi"
+        "Hesap Makinesi", "Dosya Y\x0Cneticisi", "Ekran Bilgisi"
     };
     for (uint32_t i = 0; i < 6; i++) {
         uint32_t iy = my + 28 + i * 28;
