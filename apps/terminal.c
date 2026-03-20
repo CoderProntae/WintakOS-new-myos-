@@ -26,25 +26,6 @@ static uint32_t term_count = 0;
 /* Scrollbar genisligi — icerik alani buna gore daraltilir */
 #define TERM_SCROLLBAR_W 14
 
-static inline uint8_t dbg_inb(uint16_t port)
-{
-    uint8_t ret;
-    __asm__ volatile("inb %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
-}
-
-static inline void dbg_outb(uint16_t port, uint8_t val)
-{
-    __asm__ volatile("outb %0, %1" : : "a"(val), "Nd"(port));
-}
-
-static inline uint16_t dbg_inw(uint16_t port)
-{
-    uint16_t ret;
-    __asm__ volatile("inw %1, %0" : "=a"(ret) : "Nd"(port));
-    return ret;
-}
-
 static void draw_char_at(uint32_t px, uint32_t py, uint8_t c,
                           uint32_t fg, uint32_t bg)
 {
@@ -471,7 +452,6 @@ static void term_execute(terminal_t* term)
         uint32_t dp;
         const char hex[] = "0123456789ABCDEF";
 
-        /* Her kanal ve drive icin tek tek debug */
         uint16_t bases[2] = { 0x1F0, 0x170 };
         uint16_t ctrls[2] = { 0x3F6, 0x376 };
         const char* ch_names[2] = { "Primary", "Secondary" };
@@ -479,7 +459,6 @@ static void term_execute(terminal_t* term)
         for (int ch = 0; ch < 2; ch++) {
             for (int dr = 0; dr < 2; dr++) {
                 dp = 0;
-                /* Kanal ve drive adi */
                 const char* cn = ch_names[ch];
                 while (*cn) dbuf[dp++] = *cn++;
                 dbuf[dp++] = ' ';
@@ -494,8 +473,7 @@ static void term_execute(terminal_t* term)
                 uint8_t sel = (dr == 0) ? 0xA0 : 0xB0;
                 uint8_t status;
 
-                /* 1. Floating bus */
-                status = ata_inb(base + 7);
+                status = ata_port_inb(base + 7);
                 dp = 0;
                 const char* pf = "  Status: 0x";
                 while (*pf) dbuf[dp++] = *pf++;
@@ -505,15 +483,14 @@ static void term_execute(terminal_t* term)
                 terminal_print(term, dbuf);
 
                 if (status == 0xFF) {
-                    terminal_print(term, "  -> Floating bus, atla");
+                    terminal_print(term, "  -> Floating bus");
                     continue;
                 }
 
-                /* 2. Drive sec */
-                ata_outb(base + 6, sel);
+                ata_port_outb(base + 6, sel);
                 for (volatile uint32_t w = 0; w < 50000; w++);
 
-                status = ata_inb(base + 7);
+                status = ata_port_inb(base + 7);
                 dp = 0;
                 pf = "  Secim sonrasi: 0x";
                 while (*pf) dbuf[dp++] = *pf++;
@@ -522,22 +499,21 @@ static void term_execute(terminal_t* term)
                 dbuf[dp] = 0;
                 terminal_print(term, dbuf);
 
-                /* 3. IDENTIFY gonder */
-                ata_outb(base + 2, 0);
-                ata_outb(base + 3, 0);
-                ata_outb(base + 4, 0);
-                ata_outb(base + 5, 0);
-                ata_outb(base + 7, 0xEC);
+                ata_port_outb(base + 2, 0);
+                ata_port_outb(base + 3, 0);
+                ata_port_outb(base + 4, 0);
+                ata_port_outb(base + 5, 0);
+                ata_port_outb(base + 7, 0xEC);
 
-                /* Kisa bekle */
-                ata_inb(ctrl); ata_inb(ctrl);
-                ata_inb(ctrl); ata_inb(ctrl);
+                ata_port_inb(ctrl);
+                ata_port_inb(ctrl);
+                ata_port_inb(ctrl);
+                ata_port_inb(ctrl);
                 for (volatile uint32_t w = 0; w < 50000; w++);
 
-                /* 4. IDENTIFY sonrasi status */
-                status = ata_inb(base + 7);
+                status = ata_port_inb(base + 7);
                 dp = 0;
-                pf = "  IDENTIFY sonrasi: 0x";
+                pf = "  IDENTIFY: 0x";
                 while (*pf) dbuf[dp++] = *pf++;
                 dbuf[dp++] = hex[status >> 4];
                 dbuf[dp++] = hex[status & 0x0F];
@@ -549,12 +525,9 @@ static void term_execute(terminal_t* term)
                     continue;
                 }
 
-                /* 5. BSY bekle */
-                uint32_t bsy_count = 0;
                 for (uint32_t t = 0; t < 500000; t++) {
-                    status = ata_inb(base + 7);
+                    status = ata_port_inb(base + 7);
                     if (!(status & 0x80)) break;
-                    bsy_count++;
                 }
 
                 dp = 0;
@@ -565,11 +538,10 @@ static void term_execute(terminal_t* term)
                 dbuf[dp] = 0;
                 terminal_print(term, dbuf);
 
-                /* 6. LBA mid/hi — device type */
-                uint8_t lm = ata_inb(base + 4);
-                uint8_t lh = ata_inb(base + 5);
+                uint8_t lm = ata_port_inb(base + 4);
+                uint8_t lh = ata_port_inb(base + 5);
                 dp = 0;
-                pf = "  LBA mid/hi: 0x";
+                pf = "  LBA m/h: 0x";
                 while (*pf) dbuf[dp++] = *pf++;
                 dbuf[dp++] = hex[lm >> 4];
                 dbuf[dp++] = hex[lm & 0x0F];
@@ -582,41 +554,22 @@ static void term_execute(terminal_t* term)
                 terminal_print(term, dbuf);
 
                 if (lm == 0x14 && lh == 0xEB) {
-                    terminal_print_color(term, "  -> ATAPI cihaz",
-                                         RGB(255, 200, 100));
+                    terminal_print_color(term, "  -> ATAPI", RGB(255, 200, 100));
                     continue;
-                }
-                if (lm == 0x69 && lh == 0x96) {
-                    terminal_print_color(term, "  -> SATA ATAPI",
-                                         RGB(255, 200, 100));
-                    continue;
-                }
-                if (lm == 0x3C && lh == 0xC3) {
-                    terminal_print_color(term, "  -> SATA ATA",
-                                         RGB(100, 255, 100));
-                }
-                if (lm == 0 && lh == 0) {
-                    terminal_print_color(term, "  -> ATA cihaz",
-                                         RGB(100, 255, 100));
                 }
 
-                /* 7. ERR/DRQ kontrol */
                 if (status & 0x01) {
-                    terminal_print_color(term, "  -> ERR flag!",
-                                         RGB(255, 100, 100));
+                    terminal_print_color(term, "  -> ERR!", RGB(255, 100, 100));
                     continue;
                 }
 
                 if (status & 0x08) {
-                    terminal_print_color(term, "  -> DRQ hazir, veri okunabilir",
-                                         RGB(100, 255, 100));
+                    terminal_print_color(term, "  -> DRQ OK!", RGB(100, 255, 100));
 
-                    /* Veriyi oku */
                     uint16_t ident[256];
                     for (int i = 0; i < 256; i++)
-                        ident[i] = ata_inw(base + 0);
+                        ident[i] = ata_port_inw(base + 0);
 
-                    /* Model */
                     char model[41];
                     for (int i = 0; i < 20; i++) {
                         model[i*2]   = (char)(ident[27+i] >> 8);
@@ -624,8 +577,7 @@ static void term_execute(terminal_t* term)
                     }
                     model[40] = '\0';
                     for (int i = 39; i >= 0; i--) {
-                        if (model[i]==' ' || model[i]=='\0')
-                            model[i] = '\0';
+                        if (model[i]==' '||model[i]=='\0') model[i]='\0';
                         else break;
                     }
 
@@ -637,7 +589,6 @@ static void term_execute(terminal_t* term)
                     dbuf[dp] = 0;
                     terminal_print_color(term, dbuf, RGB(100, 255, 100));
 
-                    /* Sectors */
                     uint32_t secs = (uint32_t)ident[60] |
                                     ((uint32_t)ident[61] << 16);
                     uint32_t mb = secs / 2048;
@@ -652,20 +603,15 @@ static void term_execute(terminal_t* term)
                     dbuf[dp] = 0;
                     terminal_print_color(term, dbuf, RGB(100, 255, 100));
                 } else {
-                    terminal_print_color(term, "  -> DRQ yok, veri alinamadi",
-                                         RGB(255, 100, 100));
+                    dp = 0;
+                    pf = "  -> DRQ yok: 0x";
+                    while (*pf) dbuf[dp++] = *pf++;
+                    dbuf[dp++] = hex[status >> 4];
+                    dbuf[dp++] = hex[status & 0x0F];
+                    dbuf[dp] = 0;
+                    terminal_print_color(term, dbuf, RGB(255, 100, 100));
                 }
             }
-        }
-
-        /* AHCI debug */
-        terminal_print(term, "");
-        pci_device_t pdev;
-        if (pci_find_device(0x01, 0x06, &pdev)) {
-            terminal_print_color(term, "AHCI controller bulundu",
-                                 RGB(100, 255, 100));
-        } else {
-            terminal_print(term, "AHCI controller yok");
         }
     }
     else if (str_eq(term->cmd, "lsblk")) {
