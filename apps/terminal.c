@@ -4,6 +4,7 @@
 #include "../drivers/framebuffer.h"
 #include "../drivers/font8x16.h"
 #include "../cpu/pit.h"
+#include "../cpu/pci.h"
 #include "../cpu/rtc.h"
 #include "../memory/pmm.h"
 #include "../memory/heap.h"
