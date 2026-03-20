@@ -7,6 +7,7 @@
 typedef struct {
     window_t* win;
     uint32_t  selected;
+    bool      dropdown_open;
     bool      saved;
 } display_app_t;
 
