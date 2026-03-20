@@ -9,6 +9,7 @@
 #include "../cpu/pit.h"
 #include "../fs/ramfs.h"
 #include "../lib/string.h"
+#include "../include/version.h"
 
 static setup_config_t config;
 static window_t* setup_win = NULL;
