@@ -68,7 +68,7 @@ static terminal_t*    main_terminal = NULL;
 static notepad_t*     main_notepad = NULL;
 static piano_t*       main_piano = NULL;
 
-/* Cift tik — kernel */
+/* Cift tik */
 static uint32_t kern_last_click_tick = 0;
 static int32_t  kern_last_click_x = -100;
 static int32_t  kern_last_click_y = -100;
@@ -170,12 +170,13 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
         /* Start menu */
         if (left_pressed && desktop_start_menu_open()) {
             int choice = desktop_start_menu_click(ms.x, ms.y);
-            if (choice >= 0) app_launch(choice);
+            if (choice >= 0) {
+                app_launch(choice);
+            }
         }
 
         /* Masaustu ikon — cift tik */
-        if (left_pressed && !desktop_start_menu_open() &&
-            !desktop_is_confirming()) {
+        if (left_pressed && !desktop_start_menu_open()) {
             uint32_t ty = fbi->height - TASKBAR_HEIGHT;
             if (ms.y < (int32_t)ty) {
                 uint32_t now = pit_get_ticks();
@@ -190,7 +191,8 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
                     if (ddy < 0) {
                         ddy = -ddy;
                     }
-                    if (ddx < KERN_DBLCLICK_DIST && ddy < KERN_DBLCLICK_DIST) {
+                    if (ddx < KERN_DBLCLICK_DIST &&
+                        ddy < KERN_DBLCLICK_DIST) {
                         is_dblclick = true;
                     }
                 }
