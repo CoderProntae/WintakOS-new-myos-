@@ -166,7 +166,7 @@ static void disp_draw(window_t* win)
 
     /* Secim etiketi */
     widget_draw_label(win, 12, L_SELECT_Y,
-                      "Boot \x10\x08z\x07n\x07rl\x07\x05\x07:",
+                      "Boot \x10\x0Cz\x07n\x07rl\x07\x05\x07:",
                       RGB(200, 200, 220));
 
     /* Dropdown buton */
