@@ -25,6 +25,7 @@
 #include "../apps/filemanager.h"
 #include "../apps/piano.h"
 #include "../fs/ramfs.h"
+#include "../include/version.h"
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
 
