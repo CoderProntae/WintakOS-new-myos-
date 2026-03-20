@@ -444,23 +444,78 @@ static void term_execute(terminal_t* term)
             net_send_ping(ns->gateway);
         }
     }
-        else if (str_eq(term->cmd, "diskinfo")) {
+    else if (str_eq(term->cmd, "diskinfo")) {
         terminal_print_color(term, "=== Disk Bilgisi ===", RGB(100, 200, 255));
         uint32_t dc = ata_get_drive_count();
+
+        /* Debug: tum portlari kontrol et */
+        {
+            char dbuf[48];
+            uint32_t dp;
+
+            /* Primary status */
+            dp = 0;
+            const char* pf = "IDE Primary (0x1F0): 0x";
+            while (*pf) dbuf[dp++] = *pf++;
+            uint8_t ps;
+            __asm__ volatile("inb %1, %0" : "=a"(ps) : "Nd"((uint16_t)0x1F7));
+            const char hex[] = "0123456789ABCDEF";
+            dbuf[dp++] = hex[ps >> 4];
+            dbuf[dp++] = hex[ps & 0x0F];
+            dbuf[dp] = 0;
+            terminal_print(term, dbuf);
+
+            /* Secondary status */
+            dp = 0;
+            pf = "IDE Secondary (0x170): 0x";
+            while (*pf) dbuf[dp++] = *pf++;
+            __asm__ volatile("inb %1, %0" : "=a"(ps) : "Nd"((uint16_t)0x177));
+            dbuf[dp++] = hex[ps >> 4];
+            dbuf[dp++] = hex[ps & 0x0F];
+            dbuf[dp] = 0;
+            terminal_print(term, dbuf);
+
+            /* PCI disk controller ara */
+            dp = 0;
+            pf = "PCI IDE class 01h01h: ";
+            while (*pf) dbuf[dp++] = *pf++;
+            pci_device_t pdev;
+            if (pci_find_device(0x01, 0x01, &pdev)) {
+                pf = "BULUNDU";
+                while (*pf) dbuf[dp++] = *pf++;
+            } else {
+                pf = "YOK";
+                while (*pf) dbuf[dp++] = *pf++;
+            }
+            dbuf[dp] = 0;
+            terminal_print(term, dbuf);
+
+            /* PCI AHCI controller */
+            dp = 0;
+            pf = "PCI AHCI class 01h06h: ";
+            while (*pf) dbuf[dp++] = *pf++;
+            if (pci_find_device(0x01, 0x06, &pdev)) {
+                pf = "BULUNDU";
+                while (*pf) dbuf[dp++] = *pf++;
+            } else {
+                pf = "YOK";
+                while (*pf) dbuf[dp++] = *pf++;
+            }
+            dbuf[dp] = 0;
+            terminal_print(term, dbuf);
+        }
+
         if (dc == 0) {
-            terminal_print_color(term, "Disk bulunamad\x01.",
-                                 RGB(255, 100, 100));
+            terminal_print_color(term, "Disk bulunamad\x01.", RGB(255, 100, 100));
         } else {
             char buf[64]; char nbuf[12];
             for (uint8_t i = 0; i < ATA_MAX_DRIVES; i++) {
                 ata_drive_t* d = ata_get_info(i);
                 if (!d || !d->present) continue;
-
                 uint32_t p = 0;
                 buf[p++] = 'd'; buf[p++] = 'i'; buf[p++] = 's';
                 buf[p++] = 'k'; buf[p++] = '0' + i; buf[p++] = ':';
                 buf[p++] = ' ';
-
                 if (d->is_ata) {
                     const char* m = d->model;
                     while (*m && p < 50) buf[p++] = *m++;
@@ -470,15 +525,14 @@ static void term_execute(terminal_t* term)
                 }
                 buf[p] = 0;
                 terminal_print(term, buf);
-
                 if (d->is_ata && d->size_mb > 0) {
                     p = 0;
-                    const char* pf = "  Boyut: ";
-                    while (*pf) buf[p++] = *pf++;
+                    const char* ppf = "  Boyut: ";
+                    while (*ppf) buf[p++] = *ppf++;
                     uint_to_str(d->size_mb, nbuf, 12);
                     for (uint32_t j = 0; nbuf[j]; j++) buf[p++] = nbuf[j];
-                    pf = " MB";
-                    while (*pf) buf[p++] = *pf++;
+                    ppf = " MB";
+                    while (*ppf) buf[p++] = *ppf++;
                     buf[p] = 0;
                     terminal_print(term, buf);
                 }
