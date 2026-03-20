@@ -11,4 +11,12 @@ void desktop_apply_config(void);
 bool desktop_start_menu_open(void);
 int  desktop_start_menu_click(int32_t mx, int32_t my);
 
+/* Cursor modu */
+void desktop_set_cursor(uint8_t mode);
+uint8_t desktop_get_cursor(void);
+
+/* Masaustu ikon tiklama — kernel.c icin */
+int desktop_icon_click(int32_t mx, int32_t my);
+int desktop_icon_dblclick(int32_t mx, int32_t my);
+
 #endif
