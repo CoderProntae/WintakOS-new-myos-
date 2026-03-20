@@ -112,7 +112,10 @@ verify: $(KERNEL_BIN)
 	@grub-file --is-x86-multiboot2 $(KERNEL_BIN) && echo "Multiboot2 OK" || echo "FAIL"
 
 run: $(ISO_FILE)
-	@$(QEMU) -cdrom $(ISO_FILE) -m 512M -audiodev pa,id=snd0 -machine pcspk-audiodev=snd0
+	@echo "QEMU baslatiliyor (ses destekli)..."
+	@$(QEMU) -cdrom $(ISO_FILE) -m 512M \
+		-machine pcspk-audiodev=audio0 \
+		-audiodev id=audio0,driver=sdl
 
 debug: $(ISO_FILE)
 	@$(QEMU) -cdrom $(ISO_FILE) -m 512M -s -S
