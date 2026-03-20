@@ -7,8 +7,6 @@
 typedef struct {
     window_t* win;
     uint32_t  selected;
-    bool      error;
-    char      error_msg[48];
 } display_app_t;
 
 display_app_t* display_create(int32_t x, int32_t y);
