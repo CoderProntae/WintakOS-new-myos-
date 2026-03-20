@@ -8,6 +8,7 @@
 #include "../memory/heap.h"
 #include "../fs/ramfs.h"
 #include "../lib/string.h"
+#include "../drivers/speaker.h"
 
 static sysmonitor_t monitors[2];
 static uint32_t mon_count = 0;
@@ -98,8 +99,28 @@ static void sysmon_draw(window_t* win)
     tbuf[tp] = 0;
     widget_draw_label(win, 12, 224, tbuf, RGB(180, 180, 180));
 
-    build_line(buf, "  Dosya say\x01s\x01: ", files, "");
-    widget_draw_label(win, 12, 242, buf, RGB(180, 180, 180));
+    /* Ses */
+    build_line(buf, "  Ses: ", 0, "");
+    widget_draw_label(win, 12, 260, "  Ses: ", RGB(180, 180, 180));
+    /* Driver ismini ayri yaz */
+    {
+        const char* drv = sound_get_driver_name();
+        int32_t px = win->x + 12 + 7 * 8;
+        int32_t py = win->y + 260;
+        if (px > 0 && py > 0) {
+            while (*drv) {
+                const uint8_t* glyph = font8x16_data[(uint8_t)*drv];
+                for (uint32_t gy = 0; gy < 16; gy++) {
+                    uint8_t line = glyph[gy];
+                    for (uint32_t gx = 0; gx < 8; gx++)
+                        fb_put_pixel((uint32_t)px + gx, (uint32_t)py + gy,
+                            (line & (0x80 >> gx)) ? RGB(180, 180, 180) : win->bg_color);
+                }
+                px += 8;
+                drv++;
+            }
+        }
+    }
 }
 
 sysmonitor_t* sysmonitor_create(int32_t x, int32_t y)
@@ -107,7 +128,7 @@ sysmonitor_t* sysmonitor_create(int32_t x, int32_t y)
     if (mon_count >= 2) return NULL;
     sysmonitor_t* mon = &monitors[mon_count++];
     mon->last_tick = 0;
-    mon->win = wm_create_window(x, y, 290, 268, "Sistem Monit\x0Cr\x07", RGB(30, 30, 48));
+    mon->win = wm_create_window(x, y, 290, 290, "Sistem Monit\x0Cr\x07", RGB(30, 30, 48));
     if (mon->win) mon->win->on_draw = sysmon_draw;
     return mon;
 }
