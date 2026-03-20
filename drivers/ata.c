@@ -89,19 +89,6 @@ static bool ata_wait_drq(uint16_t base, uint32_t timeout)
     }
     return false;
 }
-
-static void ata_soft_reset(uint8_t ch)
-{
-    ata_outb(channel_ctrl[ch], 0x04);  /* SRST set */
-    ata_io_wait(channel_ctrl[ch]);
-    ata_io_wait(channel_ctrl[ch]);
-    ata_outb(channel_ctrl[ch], 0x02);  /* SRST clear, nIEN set */
-    ata_io_wait(channel_ctrl[ch]);
-
-    /* BSY kalkmasi icin bekle — uzun timeout */
-    ata_wait_bsy_clear(channel_base[ch], 1000000);
-}
-
 /* ---- IDENTIFY ---- */
 
 static void ata_identify(uint8_t idx)
@@ -262,26 +249,19 @@ void ata_init(void)
     drive_count = 0;
 
     for (uint8_t ch = 0; ch < 2; ch++) {
-        /* Floating bus kontrolu */
         uint8_t s = ata_inb(channel_base[ch] + ATA_REG_STATUS);
-        if (s == 0xFF) {
-            /* Debug: channel yok */
-            continue;
-        }
+        if (s == 0xFF) continue;
 
-        /* Soft reset — DAHA GUVENLI versiyon */
         ata_outb(channel_ctrl[ch], 0x04);
         ata_io_wait(channel_ctrl[ch]);
         ata_io_wait(channel_ctrl[ch]);
         ata_io_wait(channel_ctrl[ch]);
-        ata_outb(channel_ctrl[ch], 0x00);   /* nIEN=0, interrupts aktif */
+        ata_outb(channel_ctrl[ch], 0x00);
         ata_io_wait(channel_ctrl[ch]);
         ata_io_wait(channel_ctrl[ch]);
 
-        /* Reset sonrasi uzun bekle */
         for (volatile uint32_t w = 0; w < 100000; w++);
 
-        /* BSY kalkmasi icin bekle */
         ata_wait_bsy_clear(channel_base[ch], 1000000);
 
         for (uint8_t dr = 0; dr < 2; dr++) {
@@ -301,18 +281,6 @@ void ata_init(void)
     /* IDE bulamadiysak AHCI dene */
     if (drive_count == 0) {
         if (ahci_init()) {
-            ata_drive_t* ad = ahci_get_info();
-            if (ad) {
-                memcpy(&drives[0], ad, sizeof(ata_drive_t));
-                drive_count = 1;
-            }
-        }
-    }
-}
-        /* IDE bulamadiysak AHCI dene */
-    if (drive_count == 0) {
-        if (ahci_init()) {
-            /* AHCI diskini drives[0]'a kopyala */
             ata_drive_t* ad = ahci_get_info();
             if (ad) {
                 memcpy(&drives[0], ad, sizeof(ata_drive_t));
