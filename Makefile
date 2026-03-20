@@ -34,12 +34,14 @@ C_SOURCES   := kernel/kernel.c \
                cpu/pic.c \
                cpu/pit.c \
                cpu/rtc.c \
+               cpu/pci.c \
                drivers/keyboard.c \
                drivers/vga_font.c \
                drivers/framebuffer.c \
                drivers/fbconsole.c \
                drivers/mouse.c \
                drivers/speaker.c \
+               drivers/ac97.c \
                memory/pmm.c \
                memory/heap.c \
                lib/string.c \
@@ -63,7 +65,7 @@ KERNEL_BIN := wintakos.bin
 ISO_FILE   := wintakos.iso
 ISO_DIR    := iso
 
-.PHONY: all clean run debug verify
+.PHONY: all clean run run-vbox debug verify
 
 all: $(ISO_FILE)
 	@echo "  WintakOS Milestone 11 derlendi! ISO: $(ISO_FILE)"
@@ -111,11 +113,18 @@ verify: $(KERNEL_BIN)
 	@file $(KERNEL_BIN)
 	@grub-file --is-x86-multiboot2 $(KERNEL_BIN) && echo "Multiboot2 OK" || echo "FAIL"
 
+# QEMU: AC97 ses karti + PC Speaker
 run: $(ISO_FILE)
-	@echo "QEMU baslatiliyor (ses destekli)..."
 	@$(QEMU) -cdrom $(ISO_FILE) -m 512M \
-		-machine pcspk-audiodev=audio0 \
-		-audiodev id=audio0,driver=sdl
+		-device AC97 \
+		-audiodev sdl,id=snd0 \
+		-machine pcspk-audiodev=snd0
+
+# VirtualBox icin: ISO'yu dogrudan kullan
+# VBoxManage createvm --name WintakOS --register
+# VBoxManage modifyvm WintakOS --audio-driver default --audio-controller ac97
+# VBoxManage storagectl WintakOS --name IDE --add ide
+# VBoxManage storageattach WintakOS --storagectl IDE --port 0 --type dvddrive --medium wintakos.iso
 
 debug: $(ISO_FILE)
 	@$(QEMU) -cdrom $(ISO_FILE) -m 512M -s -S
