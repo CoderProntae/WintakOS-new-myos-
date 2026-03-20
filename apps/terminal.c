@@ -11,6 +11,7 @@
 #include "../lib/string.h"
 #include "../drivers/keyboard.h"
 #include "../include/version.h"
+#include "../net/net.h"
 
 static void term_draw(window_t* win);
 static void term_execute(terminal_t* term);
@@ -158,6 +159,8 @@ static void term_execute(terminal_t* term)
         terminal_print(term, "  rm <ad>    Dosya sil");
         terminal_print(term, "  write <ad> <i\x0Ferik>");
         terminal_print(term, "  echo <..>  Metin yazd\x01r");
+        terminal_print(term, "  ifconfig   A\x05 bilgileri");
+        terminal_print(term, "  ping       Gateway'e ping");
         terminal_print(term, "  ver        S\x07r\x07m bilgisi");
     }
     else if (str_eq(term->cmd, "clear")) {
@@ -268,6 +271,67 @@ static void term_execute(terminal_t* term)
         if (!ramfs_exists(fn)) ramfs_create(fn, false);
         ramfs_write(fn, rest, strlen(rest));
         terminal_print_color(term, "Yaz\x01ld\x01.", RGB(100,255,100));
+    }
+        else if (str_eq(term->cmd, "ifconfig")) {
+        net_status_t* ns = net_get_status();
+        if (!ns->nic_found) {
+            terminal_print_color(term, "A\x05 kart\x01 bulunamad\x01.", RGB(255,100,100));
+        } else {
+            char buf[48];
+            terminal_print_color(term, "=== A\x05 Bilgisi ===", RGB(100,200,255));
+
+            uint32_t p = 0;
+            const char* pf = "MAC: ";
+            while (*pf) buf[p++] = *pf++;
+            const char hex[] = "0123456789ABCDEF";
+            for (int i = 0; i < 6; i++) {
+                buf[p++] = hex[ns->mac.addr[i] >> 4];
+                buf[p++] = hex[ns->mac.addr[i] & 0x0F];
+                if (i < 5) buf[p++] = ':';
+            }
+            buf[p] = 0;
+            terminal_print(term, buf);
+
+            p = 0; pf = "IP:  ";
+            while (*pf) buf[p++] = *pf++;
+            for (int i = 0; i < 4; i++) {
+                char nb[4]; uint_to_str(ns->ip.octets[i], nb, 4);
+                for (int j = 0; nb[j]; j++) buf[p++] = nb[j];
+                if (i < 3) buf[p++] = '.';
+            }
+            buf[p] = 0;
+            terminal_print(term, buf);
+
+            p = 0; pf = "GW:  ";
+            while (*pf) buf[p++] = *pf++;
+            for (int i = 0; i < 4; i++) {
+                char nb[4]; uint_to_str(ns->gateway.octets[i], nb, 4);
+                for (int j = 0; nb[j]; j++) buf[p++] = nb[j];
+                if (i < 3) buf[p++] = '.';
+            }
+            buf[p] = 0;
+            terminal_print(term, buf);
+
+            p = 0; pf = "TX:  ";
+            while (*pf) buf[p++] = *pf++;
+            char nb2[12]; uint_to_str(ns->packets_sent, nb2, 12);
+            for (uint32_t j = 0; nb2[j]; j++) buf[p++] = nb2[j];
+            pf = "  RX: ";
+            while (*pf) buf[p++] = *pf++;
+            uint_to_str(ns->packets_recv, nb2, 12);
+            for (uint32_t j = 0; nb2[j]; j++) buf[p++] = nb2[j];
+            buf[p] = 0;
+            terminal_print(term, buf);
+        }
+    }
+    else if (str_eq(term->cmd, "ping")) {
+        net_status_t* ns = net_get_status();
+        if (!ns->nic_found) {
+            terminal_print_color(term, "A\x05 kart\x01 yok.", RGB(255,100,100));
+        } else {
+            terminal_print(term, "Gateway'e ping g\x0Cnderiliyor...");
+            net_send_ping(ns->gateway);
+        }
     }
     else if (str_eq(term->cmd, "ver")) {
         terminal_print_color(term, WINTAKOS_FULL, RGB(100, 200, 255));
