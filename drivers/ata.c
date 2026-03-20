@@ -323,6 +323,7 @@ bool disk_config_load(disk_config_t* cfg)
         if (!ata_is_present(i)) continue;
 
         uint8_t sector[512];
+        memset(sector, 0, 512);
         if (!ata_read_sectors(i, CONFIG_LBA, 1, sector))
             continue;
 
