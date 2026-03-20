@@ -10,6 +10,7 @@
 #include "../fs/ramfs.h"
 #include "../lib/string.h"
 #include "../drivers/keyboard.h"
+#include "../include/version.h"
 
 static void term_draw(window_t* win);
 static void term_execute(terminal_t* term);
@@ -165,7 +166,7 @@ static void term_execute(terminal_t* term)
     }
     else if (str_eq(term->cmd, "sysinfo")) {
         terminal_print_color(term, "=== Sistem ===", RGB(255, 200, 100));
-        terminal_print(term, "OS:    WintakOS v0.9.0");
+        terminal_print(term, "OS:    " WINTAKOS_FULL);
         terminal_print(term, "CPU:   i386 Protected");
         char buf[40]; char nbuf[12];
         uint_to_str(pmm_get_total_mb(), nbuf, 12);
@@ -269,8 +270,7 @@ static void term_execute(terminal_t* term)
         terminal_print_color(term, "Yaz\x01ld\x01.", RGB(100,255,100));
     }
     else if (str_eq(term->cmd, "ver")) {
-        terminal_print_color(term, "WintakOS v0.9.0", RGB(100, 200, 255));
-        terminal_print(term, "Milestone 9");
+        terminal_print_color(term, WINTAKOS_FULL, RGB(100, 200, 255));
     }
     else if (str_starts(term->cmd, "echo ")) { terminal_print(term, term->cmd + 5); }
     else { terminal_print_color(term, "Bilinmeyen komut. 'help' yaz\x01n.", RGB(255,100,100)); }
@@ -353,7 +353,7 @@ terminal_t* terminal_create(int32_t x, int32_t y)
     term->win = wm_create_window(x, y, TERM_COLS * 8 + 8, TERM_ROWS * 16 + 8,
                                   "Terminal", term->bg_color);
     if (term->win) term->win->on_draw = term_draw;
-    terminal_print_color(term, "WintakOS Terminal v0.9.0", RGB(100, 200, 255));
+    terminal_print_color(term, "WintakOS Terminal " WINTAKOS_VERSION, RGB(100, 200, 255));
     terminal_print(term, "'help' yazarak ba\x03lay\x01n.");
     terminal_print(term, "");
     return term;
