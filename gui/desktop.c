@@ -10,9 +10,8 @@
 #include "../lib/string.h"
 #include "../include/version.h"
 
-/* Fiziksel ve mantiksal cozunurluk */
-static uint32_t phys_w = 800, phys_h = 600;
-static uint32_t screen_w = 800, screen_h = 600;
+static uint32_t screen_w = 800;
+static uint32_t screen_h = 600;
 
 static uint8_t  last_sec_rtc = 0xFF;
 static uint8_t  prev_buttons = 0;
@@ -20,12 +19,6 @@ static bool     start_menu_visible = false;
 static uint32_t last_update_tick = 0;
 static uint8_t  cursor_mode = CURSOR_NORMAL;
 static uint32_t busy_end_tick = 0;
-
-/* Cozunurluk onay */
-static bool     res_confirming = false;
-static uint32_t confirm_start_tick = 0;
-static uint32_t saved_w = 0, saved_h = 0;
-#define CONFIRM_TIMEOUT 700
 
 /* Cift tik */
 static uint32_t last_click_tick = 0;
@@ -40,11 +33,8 @@ static bool     icon_dragging = false;
 static int32_t  drag_icon_idx = -1;
 static int32_t  drag_icon_ox = 0, drag_icon_oy = 0;
 
-static uint32_t theme_bg_top;
-static uint32_t theme_bg_bot;
-static uint32_t theme_taskbar;
-static uint32_t theme_taskbar_text;
-static uint32_t theme_btn;
+static uint32_t theme_bg_top, theme_bg_bot;
+static uint32_t theme_taskbar, theme_taskbar_text, theme_btn;
 
 /* ---- Ikonlar ---- */
 
@@ -180,7 +170,7 @@ static void apply_theme(uint8_t theme)
     }
 }
 
-/* ---- Cizim ---- */
+/* ---- Cizim yardimcilari ---- */
 
 static void draw_char_px(uint32_t px, uint32_t py, uint8_t c,
                           uint32_t fg, uint32_t bg)
@@ -222,10 +212,6 @@ static uint32_t gradient_color_at(uint32_t y, uint32_t height)
 
 static void draw_background(void)
 {
-    /* Fiziksel tamamen siyahla, sonra viewport ciz */
-    if (screen_w < phys_w || screen_h < phys_h)
-        fb_clear(COLOR_BLACK);
-
     uint32_t bg_h = screen_h - TASKBAR_HEIGHT;
     for (uint32_t y = 0; y < bg_h; y++) {
         uint32_t color = gradient_color_at(y, bg_h);
@@ -244,29 +230,30 @@ static void draw_background(void)
 
         uint32_t ibg = gradient_color_at((uint32_t)iy, bg_h);
 
-        /* Kare secim cercevesi (outline) */
+        /* Secim cercevesi — tam kare */
         if (selected_icon == (int32_t)i) {
-            uint32_t sel_size = 48;
-            int32_t sx = ix + 8 - (int32_t)(sel_size / 2);
+            uint32_t sel_w = 48;
+            uint32_t sel_h = 48;
+            int32_t sx = ix + 8 - (int32_t)(sel_w / 2);
             int32_t sy = iy - 4;
             if (sx < 0) sx = 0;
             if (sy < 0) sy = 0;
 
             /* Mavi yari-seffaf dolgu */
-            fb_fill_rect((uint32_t)sx, (uint32_t)sy, sel_size, sel_size,
+            fb_fill_rect((uint32_t)sx, (uint32_t)sy, sel_w, sel_h,
                          RGB(30, 60, 140));
-            /* Parlak cerceve — cift cizgi */
+            /* Parlak kare cerceve */
             fb_draw_rect_outline((uint32_t)sx, (uint32_t)sy,
-                                 sel_size, sel_size, RGB(100, 180, 255));
+                                 sel_w, sel_h, RGB(100, 180, 255));
             fb_draw_rect_outline((uint32_t)sx + 1, (uint32_t)sy + 1,
-                                 sel_size - 2, sel_size - 2,
-                                 RGB(80, 140, 220));
+                                 sel_w - 2, sel_h - 2, RGB(80, 140, 220));
             ibg = RGB(30, 60, 140);
         }
 
         draw_icon_16((uint32_t)ix, (uint32_t)iy,
                      desktop_icons[i].bitmap, ibg);
 
+        /* Etiket */
         uint32_t label_len = strlen(desktop_icons[i].label);
         uint32_t lx = (uint32_t)ix + 8 - (label_len * 8) / 2;
         if (lx > screen_w) lx = 0;
@@ -288,6 +275,13 @@ static void draw_background(void)
             uint32_t dbg = gradient_color_at((uint32_t)dy, bg_h);
             draw_icon_16((uint32_t)dx, (uint32_t)dy,
                          desktop_icons[drag_icon_idx].bitmap, dbg);
+            /* Suruklenen ikonun etiketi */
+            uint32_t dl = strlen(desktop_icons[drag_icon_idx].label);
+            uint32_t dlx = (uint32_t)dx + 8 - (dl * 8) / 2;
+            if (dlx > screen_w) dlx = 0;
+            draw_string_px(dlx, (uint32_t)dy + 20,
+                           desktop_icons[drag_icon_idx].label,
+                           COLOR_WHITE, dbg);
         }
     }
 
@@ -354,28 +348,31 @@ static void draw_taskbar(void)
         }
     }
 
-    /* Saat + tarih */
+    /* Saat */
     rtc_time_t t;
     rtc_read(&t);
     char ts[9];
-    ts[0] = '0' + (char)(t.hour / 10); ts[1] = '0' + (char)(t.hour % 10);
-    ts[2] = ':';
-    ts[3] = '0' + (char)(t.minute / 10); ts[4] = '0' + (char)(t.minute % 10);
-    ts[5] = ':';
-    ts[6] = '0' + (char)(t.second / 10); ts[7] = '0' + (char)(t.second % 10);
-    ts[8] = '\0';
-    draw_string_px(screen_w - 80, ty + 8, ts, theme_taskbar_text, theme_taskbar);
+    ts[0] = '0' + (char)(t.hour / 10);
+    ts[1] = '0' + (char)(t.hour % 10); ts[2] = ':';
+    ts[3] = '0' + (char)(t.minute / 10);
+    ts[4] = '0' + (char)(t.minute % 10); ts[5] = ':';
+    ts[6] = '0' + (char)(t.second / 10);
+    ts[7] = '0' + (char)(t.second % 10); ts[8] = '\0';
+    draw_string_px(screen_w - 80, ty + 8, ts,
+                   theme_taskbar_text, theme_taskbar);
 
+    /* Tarih */
     char ds[11];
-    ds[0] = '0' + (char)(t.day / 10); ds[1] = '0' + (char)(t.day % 10);
-    ds[2] = '/';
-    ds[3] = '0' + (char)(t.month / 10); ds[4] = '0' + (char)(t.month % 10);
-    ds[5] = '/';
+    ds[0] = '0' + (char)(t.day / 10);
+    ds[1] = '0' + (char)(t.day % 10); ds[2] = '/';
+    ds[3] = '0' + (char)(t.month / 10);
+    ds[4] = '0' + (char)(t.month % 10); ds[5] = '/';
     ds[6] = '0' + (char)((t.year / 1000) % 10);
     ds[7] = '0' + (char)((t.year / 100) % 10);
     ds[8] = '0' + (char)((t.year / 10) % 10);
     ds[9] = '0' + (char)(t.year % 10); ds[10] = '\0';
-    draw_string_px(screen_w - 168, ty + 8, ds, RGB(160, 160, 180), theme_taskbar);
+    draw_string_px(screen_w - 168, ty + 8, ds,
+                   RGB(160, 160, 180), theme_taskbar);
 }
 
 /* ---- Start Menu ---- */
@@ -399,7 +396,7 @@ static void draw_start_menu(void)
 
     const char* items[] = {
         "Terminal", "Sistem Bilgisi", "Ayarlar",
-        "Hesap Makinesi", "Dosya Y\x08neticisi", "Ekran Ayarlar\x01"
+        "Hesap Makinesi", "Dosya Y\x08neticisi", "Ekran Bilgisi"
     };
     for (uint32_t i = 0; i < 6; i++) {
         uint32_t iy = my + 28 + i * 28;
@@ -409,112 +406,10 @@ static void draw_start_menu(void)
     }
 }
 
-/* ---- Cozunurluk onay diyalogu ---- */
-
-static void draw_confirm_dialog(void)
-{
-    if (!res_confirming) return;
-
-    uint32_t elapsed = pit_get_ticks() - confirm_start_tick;
-    if (elapsed >= CONFIRM_TIMEOUT) {
-        desktop_revert_resolution();
-        return;
-    }
-    uint32_t remaining = (CONFIRM_TIMEOUT - elapsed + 99) / 100;
-    if (remaining > 7) remaining = 7;
-
-    uint32_t dw = 300, dh = 130;
-    uint32_t dx = (screen_w > dw) ? (screen_w - dw) / 2 : 0;
-    uint32_t dy = (screen_h > dh) ? (screen_h - dh) / 2 : 0;
-
-    /* Golge */
-    fb_fill_rect(dx + 3, dy + 3, dw, dh, RGB(10, 10, 20));
-    /* Kutu */
-    fb_fill_rect(dx, dy, dw, dh, RGB(40, 40, 65));
-    fb_draw_rect_outline(dx, dy, dw, dh, RGB(100, 100, 160));
-    /* Baslik cubugu */
-    fb_fill_rect(dx + 1, dy + 1, dw - 2, 22, RGB(40, 80, 170));
-    draw_string_px(dx + 8, dy + 4, "\x10\x08z\x07n\x07rl\x07k De\x05i\x03ti",
-                   COLOR_WHITE, RGB(40, 80, 170));
-
-    /* Bilgi */
-    char res_txt[32];
-    uint32_t rp = 0;
-    char nb[8];
-
-    /* genislik */
-    uint32_t v = screen_w;
-    uint32_t tp = 0;
-    char tmp[8];
-    if (v == 0) { tmp[tp++] = '0'; }
-    else { while (v > 0) { tmp[tp++] = '0' + (v % 10); v /= 10; } }
-    while (tp > 0) res_txt[rp++] = tmp[--tp];
-    res_txt[rp++] = 'x';
-
-    /* yukseklik */
-    v = screen_h;
-    tp = 0;
-    if (v == 0) { tmp[tp++] = '0'; }
-    else { while (v > 0) { tmp[tp++] = '0' + (v % 10); v /= 10; } }
-    while (tp > 0) res_txt[rp++] = tmp[--tp];
-    res_txt[rp] = '\0';
-
-    draw_string_px(dx + 20, dy + 30, "Yeni:", COLOR_WHITE, RGB(40, 40, 65));
-    draw_string_px(dx + 60, dy + 30, res_txt, RGB(100, 200, 255),
-                   RGB(40, 40, 65));
-
-    draw_string_px(dx + 20, dy + 52, "Korumak istiyor musunuz?",
-                   RGB(200, 200, 200), RGB(40, 40, 65));
-
-    /* Geri sayim */
-    nb[0] = '0' + (char)remaining;
-    nb[1] = ' '; nb[2] = 's'; nb[3] = 'n'; nb[4] = '.'; nb[5] = '\0';
-    draw_string_px(dx + dw / 2 - 20, dy + 72, nb,
-                   RGB(255, 200, 100), RGB(40, 40, 65));
-
-    /* Evet butonu */
-    uint32_t ey = dy + dh - 32;
-    fb_fill_rect(dx + 40, ey, 80, 24, RGB(40, 150, 60));
-    fb_draw_rect_outline(dx + 40, ey, 80, 24, RGB(80, 200, 100));
-    draw_string_px(dx + 60, ey + 4, "Evet", COLOR_WHITE, RGB(40, 150, 60));
-
-    /* Hay\x01r butonu */
-    fb_fill_rect(dx + 180, ey, 80, 24, RGB(180, 50, 50));
-    fb_draw_rect_outline(dx + 180, ey, 80, 24, RGB(220, 80, 80));
-    draw_string_px(dx + 194, ey + 4, "Hay\x01r", COLOR_WHITE, RGB(180, 50, 50));
-}
-
-static bool handle_confirm_click(int32_t mx, int32_t my)
-{
-    if (!res_confirming) return false;
-
-    uint32_t dw = 300, dh = 130;
-    uint32_t dx = (screen_w > dw) ? (screen_w - dw) / 2 : 0;
-    uint32_t dy = (screen_h > dh) ? (screen_h - dh) / 2 : 0;
-    uint32_t ey = dy + dh - 32;
-
-    /* Evet */
-    if (mx >= (int32_t)(dx + 40) && mx < (int32_t)(dx + 120) &&
-        my >= (int32_t)ey && my < (int32_t)(ey + 24)) {
-        desktop_confirm_resolution();
-        return true;
-    }
-    /* Hayir */
-    if (mx >= (int32_t)(dx + 180) && mx < (int32_t)(dx + 260) &&
-        my >= (int32_t)ey && my < (int32_t)(ey + 24)) {
-        desktop_revert_resolution();
-        return true;
-    }
-    return true; /* onay modunda tum tiklar yakalanir */
-}
-
 /* ---- Cursor ---- */
 
 static void cursor_draw(int32_t cx, int32_t cy)
 {
-    const uint8_t (*bmp)[CURSOR_W];
-    uint32_t cw = CURSOR_W, ch = CURSOR_H;
-
     if (cursor_mode == CURSOR_BUSY) {
         uint32_t frame = (pit_get_ticks() / 10) % BUSY_FRAMES;
         for (uint32_t y = 0; y < BUSY_SIZE; y++)
@@ -530,10 +425,11 @@ static void cursor_draw(int32_t cx, int32_t cy)
         return;
     }
 
-    bmp = (cursor_mode == CURSOR_DRAG) ? cursor_drag_bitmap : cursor_bitmap;
+    const uint8_t (*bmp)[CURSOR_W] =
+        (cursor_mode == CURSOR_DRAG) ? cursor_drag_bitmap : cursor_bitmap;
 
-    for (uint32_t y = 0; y < ch; y++)
-        for (uint32_t x = 0; x < cw; x++) {
+    for (uint32_t y = 0; y < CURSOR_H; y++)
+        for (uint32_t x = 0; x < CURSOR_W; x++) {
             int32_t px = cx + (int32_t)x;
             int32_t py = cy + (int32_t)y;
             if (px < 0 || py < 0 ||
@@ -579,7 +475,7 @@ int desktop_icon_dblclick(int32_t mx, int32_t my)
     return -1;
 }
 
-/* ---- Cozunurluk API ---- */
+/* ---- Public API ---- */
 
 void desktop_set_cursor(uint8_t mode)
 {
@@ -590,55 +486,11 @@ void desktop_set_cursor(uint8_t mode)
 
 uint8_t desktop_get_cursor(void) { return cursor_mode; }
 
-void desktop_request_resolution(uint32_t w, uint32_t h)
-{
-    if (w > phys_w || h > phys_h) return; /* guvensiz */
-    if (w == screen_w && h == screen_h) return;
-
-    saved_w = screen_w;
-    saved_h = screen_h;
-    screen_w = w;
-    screen_h = h;
-    res_confirming = true;
-    confirm_start_tick = pit_get_ticks();
-    wm_set_dirty();
-}
-
-void desktop_confirm_resolution(void)
-{
-    res_confirming = false;
-    saved_w = 0;
-    saved_h = 0;
-    wm_set_dirty();
-}
-
-void desktop_revert_resolution(void)
-{
-    if (saved_w > 0 && saved_h > 0) {
-        screen_w = saved_w;
-        screen_h = saved_h;
-    }
-    res_confirming = false;
-    saved_w = 0;
-    saved_h = 0;
-    wm_set_dirty();
-}
-
-uint32_t desktop_get_screen_w(void) { return screen_w; }
-uint32_t desktop_get_screen_h(void) { return screen_h; }
-uint32_t desktop_get_max_w(void) { return phys_w; }
-uint32_t desktop_get_max_h(void) { return phys_h; }
-bool desktop_is_confirming(void) { return res_confirming; }
-
-/* ---- Public API ---- */
-
 void desktop_init(void)
 {
     framebuffer_t* info = fb_get_info();
-    phys_w = info->width;
-    phys_h = info->height;
-    screen_w = phys_w;
-    screen_h = phys_h;
+    screen_w = info->width;
+    screen_h = info->height;
 
     setup_config_t* cfg = setup_get_config();
     apply_theme(cfg->completed ? cfg->theme : 0);
@@ -656,7 +508,6 @@ void desktop_init(void)
     selected_icon = -1;
     icon_dragging = false;
     drag_icon_idx = -1;
-    res_confirming = false;
 }
 
 void desktop_apply_config(void)
@@ -675,12 +526,12 @@ int desktop_start_menu_click(int32_t mx, int32_t my)
     if (mx < (int32_t)smx || mx >= (int32_t)(smx + START_MENU_W)) return -1;
     if (my < (int32_t)smy || my >= (int32_t)(smy + START_MENU_H)) return -1;
     int32_t ry = my - (int32_t)smy;
-    if (ry >= 28 && ry < 56)   return 0; /* Terminal */
-    if (ry >= 56 && ry < 84)   return 1; /* Sistem Bilgisi */
-    if (ry >= 84 && ry < 112)  return 2; /* Ayarlar */
-    if (ry >= 112 && ry < 140) return 3; /* Hesap Makinesi */
-    if (ry >= 140 && ry < 168) return 4; /* Dosya Yoneticisi */
-    if (ry >= 168 && ry < 196) return 8; /* Ekran Ayarlari */
+    if (ry >= 28 && ry < 56)   return 0;
+    if (ry >= 56 && ry < 84)   return 1;
+    if (ry >= 84 && ry < 112)  return 2;
+    if (ry >= 112 && ry < 140) return 3;
+    if (ry >= 140 && ry < 168) return 4;
+    if (ry >= 168 && ry < 196) return 8;
     return -1;
 }
 
@@ -701,13 +552,6 @@ void desktop_update(void)
     bool left_pressed = left_down && !(prev_buttons & MOUSE_BTN_LEFT);
     bool left_released = !left_down && (prev_buttons & MOUSE_BTN_LEFT);
 
-    /* Onay diyalogu aktifse tiklamalar oraya */
-    if (res_confirming && left_pressed) {
-        handle_confirm_click(ms.x, ms.y);
-        prev_buttons = ms.buttons;
-        goto render;
-    }
-
     /* Ikon surukleme devam */
     if (icon_dragging && left_down) {
         cursor_mode = CURSOR_DRAG;
@@ -720,7 +564,8 @@ void desktop_update(void)
             int32_t ny = ms.y - drag_icon_oy;
             if (nx < 4) nx = 4;
             if (ny < 4) ny = 4;
-            if (nx > (int32_t)screen_w - 24) nx = (int32_t)screen_w - 24;
+            if (nx > (int32_t)screen_w - 24)
+                nx = (int32_t)screen_w - 24;
             if (ny > (int32_t)screen_h - TASKBAR_HEIGHT - 40)
                 ny = (int32_t)screen_h - TASKBAR_HEIGHT - 40;
             desktop_icons[drag_icon_idx].x = nx;
@@ -767,10 +612,15 @@ void desktop_update(void)
             if (now - last_click_tick < DBLCLICK_TIME) {
                 int32_t ddx = ms.x - last_click_x;
                 int32_t ddy = ms.y - last_click_y;
-                if (ddx < 0) ddx = -ddx;
-                if (ddy < 0) ddy = -ddy;
-                if (ddx < DBLCLICK_DIST && ddy < DBLCLICK_DIST)
+                if (ddx < 0) {
+                    ddx = -ddx;
+                }
+                if (ddy < 0) {
+                    ddy = -ddy;
+                }
+                if (ddx < DBLCLICK_DIST && ddy < DBLCLICK_DIST) {
                     is_dblclick = true;
+                }
             }
 
             int hit = icon_hit_test(ms.x, ms.y);
@@ -807,16 +657,14 @@ void desktop_update(void)
     wm_handle_mouse(ms.x, ms.y, ms.buttons);
     prev_buttons = ms.buttons;
 
-render:
-    ;
+    /* Render */
     bool need_swap = false;
 
-    if (wm_is_dirty() || res_confirming) {
+    if (wm_is_dirty()) {
         draw_background();
         wm_draw_all();
         draw_taskbar();
         if (start_menu_visible) draw_start_menu();
-        if (res_confirming) draw_confirm_dialog();
         cursor_draw(ms.x, ms.y);
         wm_clear_dirty();
         need_swap = true;
