@@ -10,7 +10,12 @@
 
 static bool use_ac97 = false;
 
-/* PC Speaker */
+static void pcspk_stop(void)
+{
+    uint8_t val = inb(SPEAKER_PORT);
+    outb(SPEAKER_PORT, val & ~0x03);
+}
+
 static void pcspk_play(uint32_t frequency)
 {
     if (frequency == 0) { pcspk_stop(); return; }
@@ -22,12 +27,6 @@ static void pcspk_play(uint32_t frequency)
     outb(PIT_CHANNEL2, (uint8_t)((div >> 8) & 0xFF));
     uint8_t val = inb(SPEAKER_PORT);
     outb(SPEAKER_PORT, val | 0x03);
-}
-
-static void pcspk_stop(void)
-{
-    uint8_t val = inb(SPEAKER_PORT);
-    outb(SPEAKER_PORT, val & ~0x03);
 }
 
 static void delay_ms(uint32_t ms)
@@ -42,20 +41,13 @@ static void delay_ms(uint32_t ms)
 void speaker_init(void)
 {
     pcspk_stop();
-    /* AC97 dene */
-    if (ac97_init()) {
-        use_ac97 = true;
-    } else {
-        use_ac97 = false;
-    }
+    if (ac97_init()) use_ac97 = true;
+    else use_ac97 = false;
 }
 
 void speaker_play_tone(uint32_t frequency)
 {
-    if (use_ac97) {
-        ac97_play_tone(frequency);
-    }
-    /* PC Speaker her zaman paralel cal — gercek donanımda yedek */
+    if (use_ac97) ac97_play_tone(frequency);
     pcspk_play(frequency);
 }
 
