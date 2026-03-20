@@ -1,4 +1,5 @@
 #include "../include/types.h"
+#include "../include/version.h"
 #include "../kernel/vga.h"
 #include "../cpu/gdt.h"
 #include "../cpu/idt.h"
@@ -24,8 +25,9 @@
 #include "../apps/sysmonitor.h"
 #include "../apps/filemanager.h"
 #include "../apps/piano.h"
+#include "../apps/network.h"
 #include "../fs/ramfs.h"
-#include "../include/version.h"
+#include "../net/net.h"
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
 
@@ -85,46 +87,45 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     heap_init();
     ramfs_init();
 
+    /* Ag */
+    net_init();
+
     framebuffer_t* fbi = fb_get_info();
     mouse_init(fbi->width, fbi->height);
     keyboard_init();
     __asm__ volatile("sti");
 
-    /* Baslangic sesi */
     sound_startup();
 
     desktop_init();
     setup_run();
     desktop_apply_config();
 
-    /* Uygulamalar */
     main_terminal = terminal_create(150, 20);
     calculator_create(10, 60);
     main_notepad = notepad_create(490, 10);
     sysmonitor_create(490, 250);
     filemanager_create(10, 310);
     main_piano = piano_create(200, 330);
+    network_create(10, 160);
 
     wm_set_dirty();
 
-    /* Tus birakilma zamanlayicisi (piyano icin) */
     uint32_t piano_release_tick = 0;
     bool piano_key_held = false;
 
     while (1) {
         uint8_t c = keyboard_getchar();
         if (c) {
-            /* Aktif pencereye yonlendir */
             window_t* aw = NULL;
             for (uint32_t i = 0; i < wm_get_count(); i++) {
                 window_t* w = wm_get_window(i);
                 if (w && w->active && (w->flags & WIN_FLAG_VISIBLE)) { aw = w; break; }
             }
-
             if (aw && main_piano && aw == main_piano->win) {
                 piano_input_char(main_piano, c);
                 piano_key_held = true;
-                piano_release_tick = pit_get_ticks() + 15; /* ~150ms sonra birak */
+                piano_release_tick = pit_get_ticks() + 15;
             }
             else if (aw && main_terminal && aw == main_terminal->win)
                 terminal_input_char(main_terminal, c);
@@ -132,13 +133,11 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
                 notepad_input_char(main_notepad, c);
         }
 
-        /* Piyano tus birakilma simulasyonu */
         if (piano_key_held && pit_get_ticks() >= piano_release_tick) {
             piano_key_release(main_piano);
             piano_key_held = false;
         }
 
-        /* Ok tuslari */
         key_event_t ev;
         if (keyboard_poll(&ev) && !ev.released && ev.keycode != KEY_NONE) {
             window_t* aw = NULL;
@@ -152,6 +151,7 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
                 notepad_input_key(main_notepad, ev.keycode);
         }
 
+        net_process();
         desktop_update();
         __asm__ volatile("hlt");
     }
