@@ -9,9 +9,12 @@
 static network_app_t net_apps[2];
 static uint32_t net_app_count = 0;
 
+#define NET_CONTENT_W  240
+#define NET_CONTENT_H  210
+
 static void uint_to_str(uint32_t val, char* buf)
 {
-    if (val == 0) { buf[0]='0'; buf[1]=0; return; }
+    if (val == 0) { buf[0] = '0'; buf[1] = 0; return; }
     char tmp[12]; uint32_t tp = 0;
     while (val > 0) { tmp[tp++] = '0' + (val % 10); val /= 10; }
     uint32_t i = 0;
@@ -43,16 +46,35 @@ static void ip_to_str(ip_addr_t ip, char* buf)
     buf[p] = 0;
 }
 
+/* Ortalama offset hesapla */
+static void net_get_offset(window_t* win, uint32_t* ox, uint32_t* oy)
+{
+    int32_t extra_w = (int32_t)win->width - (int32_t)NET_CONTENT_W - 20;
+    int32_t extra_h = (int32_t)win->height - (int32_t)NET_CONTENT_H - 10;
+    *ox = extra_w > 0 ? (uint32_t)extra_w / 2 : 0;
+    *oy = extra_h > 0 ? (uint32_t)extra_h / 2 : 0;
+}
+
 static void net_draw(window_t* win)
 {
     net_status_t* st = net_get_status();
     char buf[48];
 
-    widget_draw_label(win, 12, 8, "=== A\x05 Durumu ===", RGB(100, 200, 255));
+    uint32_t ox, oy;
+    net_get_offset(win, &ox, &oy);
+    uint32_t base_x = 12 + ox;
+    uint32_t y = 8 + oy;
+
+    widget_draw_label(win, base_x, y, "=== A\x05 Durumu ===",
+                      RGB(100, 200, 255));
+    y += 28;
 
     if (!st->nic_found) {
-        widget_draw_label(win, 12, 36, "A\x05 kart\x01 bulunamad\x01!", RGB(255, 100, 100));
-        widget_draw_label(win, 12, 56, "RTL8139 gerekli.", RGB(180, 180, 180));
+        widget_draw_label(win, base_x, y, "A\x05 kart\x01 bulunamad\x01!",
+                          RGB(255, 100, 100));
+        y += 20;
+        widget_draw_label(win, base_x, y, "RTL8139 gerekli.",
+                          RGB(180, 180, 180));
         return;
     }
 
@@ -63,28 +85,33 @@ static void net_draw(window_t* win)
     const char* nn = nic_get_name();
     while (*nn) buf[bp++] = *nn++;
     buf[bp] = 0;
-    widget_draw_label(win, 12, 36, buf, RGB(180, 220, 255));
-    
+    widget_draw_label(win, base_x, y, buf, RGB(180, 220, 255));
+    y += 22;
+
     /* Durum */
     const char* link = st->link_up ? "Ba\x05l\x01" : "Ba\x05l\x01 De\x05il";
     uint32_t lcolor = st->link_up ? RGB(100, 255, 100) : RGB(255, 100, 100);
-    widget_draw_label(win, 12, 58, "Durum: ", RGB(200, 200, 200));
-    widget_draw_label(win, 68, 58, link, lcolor);
+    widget_draw_label(win, base_x, y, "Durum: ", RGB(200, 200, 200));
+    widget_draw_label(win, base_x + 56, y, link, lcolor);
+    y += 22;
 
     /* MAC */
     mac_to_str(st->mac, buf);
-    widget_draw_label(win, 12, 80, "MAC:", RGB(200, 200, 200));
-    widget_draw_label(win, 52, 80, buf, RGB(180, 220, 255));
+    widget_draw_label(win, base_x, y, "MAC:", RGB(200, 200, 200));
+    widget_draw_label(win, base_x + 40, y, buf, RGB(180, 220, 255));
+    y += 22;
 
     /* IP */
     ip_to_str(st->ip, buf);
-    widget_draw_label(win, 12, 102, "IP:", RGB(200, 200, 200));
-    widget_draw_label(win, 44, 102, buf, RGB(180, 220, 255));
+    widget_draw_label(win, base_x, y, "IP:", RGB(200, 200, 200));
+    widget_draw_label(win, base_x + 32, y, buf, RGB(180, 220, 255));
+    y += 22;
 
     /* Gateway */
     ip_to_str(st->gateway, buf);
-    widget_draw_label(win, 12, 124, "GW:", RGB(200, 200, 200));
-    widget_draw_label(win, 44, 124, buf, RGB(180, 180, 180));
+    widget_draw_label(win, base_x, y, "GW:", RGB(200, 200, 200));
+    widget_draw_label(win, base_x + 32, y, buf, RGB(180, 180, 180));
+    y += 28;
 
     /* Paket sayaclari */
     uint32_t p = 0;
@@ -98,31 +125,36 @@ static void net_draw(window_t* win)
     uint_to_str(st->packets_recv, nbuf);
     for (uint32_t j = 0; nbuf[j]; j++) buf[p++] = nbuf[j];
     buf[p] = 0;
-    widget_draw_label(win, 12, 152, buf, RGB(180, 180, 180));
+    widget_draw_label(win, base_x, y, buf, RGB(180, 180, 180));
+    y += 22;
 
     /* Ping */
     if (st->ping_ms > 0) {
-        p = 0;
-        pf = "Ping: ";
+        p = 0; pf = "Ping: ";
         while (*pf) buf[p++] = *pf++;
         uint_to_str(st->ping_ms, nbuf);
         for (uint32_t j = 0; nbuf[j]; j++) buf[p++] = nbuf[j];
         pf = " ms";
         while (*pf) buf[p++] = *pf++;
         buf[p] = 0;
-        widget_draw_label(win, 12, 174, buf, RGB(100, 255, 100));
+        widget_draw_label(win, base_x, y, buf, RGB(100, 255, 100));
     }
 
     /* Ping butonu */
-    widget_draw_button(win, 12, 180, 100, 26, "Ping G\x0Cnder", RGB(50, 100, 180), COLOR_WHITE);
+    widget_draw_button(win, base_x, y + 6, 100, 26, "Ping G\x0Cnder",
+                       RGB(50, 100, 180), COLOR_WHITE);
 }
 
 static void net_click(window_t* win, int32_t rx, int32_t ry)
 {
-    (void)win;
     net_status_t* st = net_get_status();
 
-    if (widget_button_hit(win, 12, 180, 100, 26, rx, ry)) {
+    uint32_t ox, oy;
+    net_get_offset(win, &ox, &oy);
+    uint32_t btn_x = 12 + ox;
+    uint32_t btn_y = 8 + oy + 28 + 22 * 6 + 6;
+
+    if (widget_button_hit(win, btn_x, btn_y, 100, 26, rx, ry)) {
         if (st->nic_found) {
             net_send_ping(st->gateway);
             wm_set_dirty();
@@ -135,7 +167,8 @@ network_app_t* network_create(int32_t x, int32_t y)
     if (net_app_count >= 2) return NULL;
     network_app_t* app = &net_apps[net_app_count++];
 
-    app->win = wm_create_window(x, y, 260, 220, "A\x05 Durumu", RGB(30, 30, 48));
+    app->win = wm_create_window(x, y, 260, 220, "A\x05 Durumu",
+                                 RGB(30, 30, 48));
     if (app->win) {
         app->win->on_draw = net_draw;
         app->win->on_click = net_click;
