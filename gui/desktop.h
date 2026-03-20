@@ -5,6 +5,11 @@
 
 #define TASKBAR_HEIGHT  32
 
+/* Cursor modlari — her yerden erisilebilir */
+#define CURSOR_NORMAL  0
+#define CURSOR_BUSY    1
+#define CURSOR_DRAG    2
+
 void desktop_init(void);
 void desktop_update(void);
 void desktop_apply_config(void);
