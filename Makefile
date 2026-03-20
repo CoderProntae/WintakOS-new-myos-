@@ -65,6 +65,7 @@ C_SOURCES   := kernel/kernel.c \
                drivers/e1000.c \
                drivers/pcnet.c \
                drivers/ata.c \
+               drivers/ahci.c \
                fs/vfs.c \
                net/net.c
 
