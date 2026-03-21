@@ -156,24 +156,27 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     sound_startup();
 
     /* Diskten config yukle */
+    /* Diskten config yukle */
     disk_config_t disk_cfg;
     memset(&disk_cfg, 0, sizeof(disk_cfg));
     bool has_disk_cfg = disk_config_load(&disk_cfg);
 
     if (has_disk_cfg) {
         setup_config_t* scfg = setup_get_config();
-        if (disk_cfg.theme <= 4) {
+        if (disk_cfg.theme > 0 && disk_cfg.theme <= 4) {
             scfg->theme = disk_cfg.theme;
         }
-        if (disk_cfg.username[0] != '\0') {
+        if (disk_cfg.username[0] != '\0' && disk_cfg.username[0] != (char)0xFF) {
             uint32_t i = 0;
-            while (i < 31 && disk_cfg.username[i]) {
+            while (i < 31 && disk_cfg.username[i] &&
+                   disk_cfg.username[i] != (char)0xFF) {
                 scfg->username[i] = disk_cfg.username[i];
                 i++;
             }
             scfg->username[i] = '\0';
             scfg->completed = true;
         }
+        /* username yoksa setup calissin */
     }
 
     desktop_init();
