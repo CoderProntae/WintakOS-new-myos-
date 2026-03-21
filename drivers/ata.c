@@ -306,28 +306,23 @@ void ata_init(void)
     drive_count = 0;
 
     for (uint8_t ch = 0; ch < 2; ch++) {
-        /* Floating bus kontrolu — SADECE 0xFF ise atla */
-        uint8_t s = ata_inb(channel_base[ch] + ATA_REG_STATUS);
+        uint16_t base = channel_base[ch];
+
+        /* Floating bus kontrolu */
+        uint8_t s = ata_inb(base + ATA_REG_STATUS);
         if (s == 0xFF) continue;
 
-        /* Reset */
-        ata_outb(channel_ctrl[ch], 0x04);
-        ata_io_wait(channel_ctrl[ch]);
-        ata_io_wait(channel_ctrl[ch]);
-        ata_io_wait(channel_ctrl[ch]);
-        ata_outb(channel_ctrl[ch], 0x00);
-        ata_io_wait(channel_ctrl[ch]);
-        ata_io_wait(channel_ctrl[ch]);
-
-        /* Uzun bekleme */
-        for (volatile uint32_t w = 0; w < 200000; w++);
-
-        /* BSY bekle */
-        ata_wait_bsy_clear(channel_base[ch], 1000000);
+        /* RESET YAPMA — bazi controller'lari bozuyor */
+        /* Sadece interrupts kapat */
+        ata_outb(channel_ctrl[ch], 0x02);
+        ata_inb(channel_ctrl[ch]);
+        ata_inb(channel_ctrl[ch]);
+        ata_inb(channel_ctrl[ch]);
+        ata_inb(channel_ctrl[ch]);
 
         for (uint8_t dr = 0; dr < 2; dr++) {
             uint8_t idx = ch * 2 + dr;
-            drives[idx].base_port = channel_base[ch];
+            drives[idx].base_port = base;
             drives[idx].drive_num = dr;
             drives[idx].channel = ch;
             drives[idx].present = false;
