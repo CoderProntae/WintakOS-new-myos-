@@ -142,6 +142,11 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     keyboard_init();
     __asm__ volatile("sti");
 
+    /* Interrupt'lar acildiktan sonra disk init */
+    /* Kisa bekleme — controller hazir olsun */
+    for (volatile uint32_t w = 0; w < 500000; w++);
+    ata_init();
+
     sound_startup();
 
     desktop_init();
