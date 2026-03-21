@@ -643,6 +643,53 @@ static void term_execute(terminal_t* term)
                                  RGB(150, 150, 150));
         }
     }
+        else if (str_eq(term->cmd, "diskwrite")) {
+        if (ata_get_drive_count() == 0) {
+            terminal_print_color(term, "Disk yok!", RGB(255, 100, 100));
+        } else {
+            disk_config_t cfg;
+            memset(&cfg, 0, sizeof(cfg));
+            cfg.magic = CONFIG_MAGIC;
+            cfg.version = CONFIG_VERSION;
+            cfg.pref_res_w = 800;
+            cfg.pref_res_h = 600;
+            cfg.theme = 0;
+            const char* un = "test";
+            uint32_t ui = 0;
+            while (un[ui]) { cfg.username[ui] = un[ui]; ui++; }
+            cfg.username[ui] = '\0';
+            if (disk_config_save(&cfg)) {
+                terminal_print_color(term, "Yazma ba\x03ar\x01l\x01!", RGB(100, 255, 100));
+            } else {
+                terminal_print_color(term, "Yazma ba\x03ar\x01s\x01z!", RGB(255, 100, 100));
+            }
+        }
+    }
+    else if (str_eq(term->cmd, "diskread")) {
+        if (ata_get_drive_count() == 0) {
+            terminal_print_color(term, "Disk yok!", RGB(255, 100, 100));
+        } else {
+            disk_config_t cfg;
+            memset(&cfg, 0, sizeof(cfg));
+            if (disk_config_load(&cfg)) {
+                terminal_print_color(term, "Config okundu!", RGB(100, 255, 100));
+                char buf[48];
+                uint32_t p = 0;
+                const char* pf = "  Res: ";
+                while (*pf) buf[p++] = *pf++;
+                char nb[8];
+                uint_to_str(cfg.pref_res_w, nb, 8);
+                for (uint32_t j = 0; nb[j]; j++) buf[p++] = nb[j];
+                buf[p++] = 'x';
+                uint_to_str(cfg.pref_res_h, nb, 8);
+                for (uint32_t j = 0; nb[j]; j++) buf[p++] = nb[j];
+                buf[p] = 0;
+                terminal_print(term, buf);
+            } else {
+                terminal_print_color(term, "Config bulunamad\x01.", RGB(255, 100, 100));
+            }
+        }
+    }
     else if (str_eq(term->cmd, "ver")) {
         terminal_print_color(term, WINTAKOS_FULL, RGB(100, 200, 255));
     }
