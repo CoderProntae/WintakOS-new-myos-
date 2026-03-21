@@ -296,7 +296,11 @@ static void disp_click(window_t* win, int32_t rx, int32_t ry)
 
     /* Kaydet butonu */
     if (widget_button_hit(win, 24, L_APPLY_Y, 200, 28, rx, ry)) {
-        if (ata_get_drive_count() == 0) return;
+        if (ata_get_drive_count() == 0) {
+            d->saved = false;
+            wm_set_dirty();
+            return;
+        }
 
         disk_config_t cfg;
         memset(&cfg, 0, sizeof(cfg));
@@ -305,7 +309,6 @@ static void disp_click(window_t* win, int32_t rx, int32_t ry)
         cfg.pref_res_w = res_options[d->selected].w;
         cfg.pref_res_h = res_options[d->selected].h;
 
-        /* Mevcut setup bilgilerini de kaydet */
         setup_config_t* scfg = setup_get_config();
         cfg.theme = scfg->theme;
         uint32_t ui = 0;
@@ -315,9 +318,22 @@ static void disp_click(window_t* win, int32_t rx, int32_t ry)
         }
         cfg.username[ui] = '\0';
 
-        if (disk_config_save(&cfg)) {
-            d->saved = true;
+        bool ok = disk_config_save(&cfg);
+        d->saved = ok;
+
+        if (ok) {
+            disk_config_t verify;
+            memset(&verify, 0, sizeof(verify));
+            if (disk_config_load(&verify)) {
+                if (verify.pref_res_w != cfg.pref_res_w ||
+                    verify.pref_res_h != cfg.pref_res_h) {
+                    d->saved = false;
+                }
+            } else {
+                d->saved = false;
+            }
         }
+
         wm_set_dirty();
     }
 }
