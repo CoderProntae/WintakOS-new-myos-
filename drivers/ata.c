@@ -128,27 +128,16 @@ static void ata_identify(uint8_t idx)
     uint8_t sel = (d->drive_num == 0) ? 0xA0 : 0xB0;
     uint8_t status;
 
-    /* Drive sec */
-    ata_outb(base + ATA_REG_DRIVE, sel);
-    ata_inb(ctrl); ata_inb(ctrl); ata_inb(ctrl); ata_inb(ctrl);
+    /* Floating bus */
+    status = ata_inb(base + ATA_REG_STATUS);
+    if (status == 0xFF) { d->present = false; return; }
 
-    /* Uzun bekleme — VirtualBox icin kritik */
+    /* Drive sec — debug ile BIREBIR AYNI */
+    ata_outb(base + ATA_REG_DRIVE, sel);
     for (volatile uint32_t w = 0; w < 100000; w++);
 
-    /* Status kontrol */
     status = ata_inb(base + ATA_REG_STATUS);
-
-    /* 0xFF = floating bus */
-    if (status == 0xFF) {
-        d->present = false;
-        return;
-    }
-
-    /* BSY kalkmasi bekle */
-    for (uint32_t t = 0; t < 500000; t++) {
-        status = ata_inb(base + ATA_REG_STATUS);
-        if (!(status & ATA_SR_BSY)) break;
-    }
+    if (status == 0xFF) { d->present = false; return; }
 
     /* Registerleri sifirla */
     ata_outb(base + ATA_REG_SECCOUNT, 0);
@@ -156,103 +145,55 @@ static void ata_identify(uint8_t idx)
     ata_outb(base + ATA_REG_LBA_MID, 0);
     ata_outb(base + ATA_REG_LBA_HI, 0);
 
-    /* IDENTIFY gonder */
+    /* IDENTIFY */
     ata_outb(base + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
-
-    /* IO wait */
     ata_inb(ctrl); ata_inb(ctrl); ata_inb(ctrl); ata_inb(ctrl);
-
-    /* Bekleme — bazi controller'lar yavas */
     for (volatile uint32_t w = 0; w < 100000; w++);
 
-    /* Status kontrol */
     status = ata_inb(base + ATA_REG_STATUS);
-    if (status == 0) {
-        d->present = false;
-        return;
-    }
+    if (status == 0) { d->present = false; return; }
 
-    /* BSY kalkmasi bekle */
+    /* BSY bekle */
     for (uint32_t t = 0; t < 1000000; t++) {
         status = ata_inb(base + ATA_REG_STATUS);
         if (!(status & ATA_SR_BSY)) break;
     }
+    if (status & ATA_SR_BSY) { d->present = false; return; }
 
-    if (status & ATA_SR_BSY) {
-        d->present = false;
-        return;
-    }
+    /* LBA mid/hi */
+    uint8_t lm = ata_inb(base + ATA_REG_LBA_MID);
+    uint8_t lh = ata_inb(base + ATA_REG_LBA_HI);
 
-    /* ATAPI kontrolu */
-    uint8_t lba_mid = ata_inb(base + ATA_REG_LBA_MID);
-    uint8_t lba_hi  = ata_inb(base + ATA_REG_LBA_HI);
-
-    if (lba_mid == 0x14 && lba_hi == 0xEB) {
-        d->present = true;
-        d->is_ata = false;
-        d->sectors = 0;
-        d->size_mb = 0;
-        const char* name = "ATAPI Device";
-        uint32_t ni = 0;
-        while (name[ni]) { d->model[ni] = name[ni]; ni++; }
-        d->model[ni] = '\0';
+    if (lm == 0x14 && lh == 0xEB) {
+        d->present = true; d->is_ata = false;
+        d->sectors = 0; d->size_mb = 0;
+        const char* n = "ATAPI Device";
+        uint32_t i = 0; while (n[i]) { d->model[i] = n[i]; i++; }
+        d->model[i] = '\0';
         memset(d->serial, 0, sizeof(d->serial));
         return;
     }
 
-    if (lba_mid == 0x69 && lba_hi == 0x96) {
-        d->present = true;
-        d->is_ata = false;
-        d->sectors = 0;
-        d->size_mb = 0;
-        const char* name = "SATA ATAPI";
-        uint32_t ni = 0;
-        while (name[ni]) { d->model[ni] = name[ni]; ni++; }
-        d->model[ni] = '\0';
-        memset(d->serial, 0, sizeof(d->serial));
-        return;
-    }
-
-    if (lba_mid == 0x3C && lba_hi == 0xC3) {
-        /* SATA — devam */
-    } else if (lba_mid != 0 || lba_hi != 0) {
-        d->present = true;
-        d->is_ata = false;
-        d->sectors = 0;
-        d->size_mb = 0;
+    if (lm != 0 || lh != 0) {
+        d->present = true; d->is_ata = false;
+        d->sectors = 0; d->size_mb = 0;
         memset(d->model, 0, sizeof(d->model));
         memset(d->serial, 0, sizeof(d->serial));
         return;
     }
 
-    /* ERR kontrol */
-    status = ata_inb(base + ATA_REG_STATUS);
-    if (status & ATA_SR_ERR) {
-        d->present = true;
-        d->is_ata = false;
-        d->sectors = 0;
-        d->size_mb = 0;
-        memset(d->model, 0, sizeof(d->model));
-        memset(d->serial, 0, sizeof(d->serial));
-        return;
-    }
+    /* ERR */
+    if (status & ATA_SR_ERR) { d->present = false; return; }
 
-    /* DRQ bekle — uzun timeout */
+    /* DRQ bekle */
     for (uint32_t t = 0; t < 1000000; t++) {
         status = ata_inb(base + ATA_REG_STATUS);
-        if (status & ATA_SR_ERR) {
-            d->present = false;
-            return;
-        }
         if (status & ATA_SR_DRQ) break;
+        if (status & ATA_SR_ERR) { d->present = false; return; }
     }
+    if (!(status & ATA_SR_DRQ)) { d->present = false; return; }
 
-    if (!(status & ATA_SR_DRQ)) {
-        d->present = false;
-        return;
-    }
-
-    /* IDENTIFY verisini oku */
+    /* Oku */
     uint16_t ident[256];
     for (int i = 0; i < 256; i++)
         ident[i] = ata_inw(base + ATA_REG_DATA);
@@ -260,44 +201,33 @@ static void ata_identify(uint8_t idx)
     d->present = true;
     d->is_ata = true;
 
-    /* Model (word 27-46) */
     for (int i = 0; i < 20; i++) {
-        d->model[i * 2]     = (char)(ident[27 + i] >> 8);
-        d->model[i * 2 + 1] = (char)(ident[27 + i] & 0xFF);
+        d->model[i*2]   = (char)(ident[27+i] >> 8);
+        d->model[i*2+1] = (char)(ident[27+i] & 0xFF);
     }
     d->model[40] = '\0';
     for (int i = 39; i >= 0; i--) {
-        if (d->model[i] == ' ' || d->model[i] == '\0')
-            d->model[i] = '\0';
-        else
-            break;
+        if (d->model[i]==' '||d->model[i]=='\0') d->model[i]='\0';
+        else break;
     }
 
-    /* Serial (word 10-19) */
     for (int i = 0; i < 10; i++) {
-        d->serial[i * 2]     = (char)(ident[10 + i] >> 8);
-        d->serial[i * 2 + 1] = (char)(ident[10 + i] & 0xFF);
+        d->serial[i*2]   = (char)(ident[10+i] >> 8);
+        d->serial[i*2+1] = (char)(ident[10+i] & 0xFF);
     }
     d->serial[20] = '\0';
     for (int i = 19; i >= 0; i--) {
-        if (d->serial[i] == ' ' || d->serial[i] == '\0')
-            d->serial[i] = '\0';
-        else
-            break;
+        if (d->serial[i]==' '||d->serial[i]=='\0') d->serial[i]='\0';
+        else break;
     }
 
-    /* Sectors */
     d->sectors = (uint32_t)ident[60] | ((uint32_t)ident[61] << 16);
     if (d->sectors == 0)
         d->sectors = (uint32_t)ident[100] | ((uint32_t)ident[101] << 16);
     d->size_mb = d->sectors / 2048;
 
-    if (d->sectors < 16) {
-        d->present = false;
-        d->is_ata = false;
-    }
+    if (d->sectors < 16) { d->present = false; d->is_ata = false; }
 }
-
 /* ---- Public API ---- */
 
 void ata_init(void)
@@ -308,18 +238,11 @@ void ata_init(void)
     for (uint8_t ch = 0; ch < 2; ch++) {
         uint16_t base = channel_base[ch];
 
-        /* Floating bus kontrolu */
+        /* Floating bus */
         uint8_t s = ata_inb(base + ATA_REG_STATUS);
         if (s == 0xFF) continue;
 
-        /* RESET YAPMA — bazi controller'lari bozuyor */
-        /* Sadece interrupts kapat */
-        ata_outb(channel_ctrl[ch], 0x02);
-        ata_inb(channel_ctrl[ch]);
-        ata_inb(channel_ctrl[ch]);
-        ata_inb(channel_ctrl[ch]);
-        ata_inb(channel_ctrl[ch]);
-
+        /* RESET YOK — sadece tara */
         for (uint8_t dr = 0; dr < 2; dr++) {
             uint8_t idx = ch * 2 + dr;
             drives[idx].base_port = base;
@@ -334,7 +257,7 @@ void ata_init(void)
         }
     }
 
-    /* IDE bulamadiysak AHCI dene */
+    /* AHCI fallback */
     if (drive_count == 0) {
         if (ahci_init()) {
             ata_drive_t* ad = ahci_get_info();
