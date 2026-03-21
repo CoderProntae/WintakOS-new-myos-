@@ -30,6 +30,7 @@
 #include "../fs/ramfs.h"
 #include "../net/net.h"
 #include "../drivers/ata.h"
+#include "../lib/string.h"
 
 #define MULTIBOOT2_BOOTLOADER_MAGIC  0x36D76289
 
