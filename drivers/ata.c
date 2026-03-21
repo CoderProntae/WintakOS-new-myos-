@@ -126,33 +126,26 @@ static void ata_identify(uint8_t idx)
     uint16_t base = d->base_port;
     uint16_t ctrl = channel_ctrl[d->channel];
     uint8_t sel = (d->drive_num == 0) ? 0xA0 : 0xB0;
+    uint8_t status;
 
     /* Drive sec */
     ata_outb(base + ATA_REG_DRIVE, sel);
-    ata_io_wait(ctrl);
-    ata_io_wait(ctrl);
+    ata_inb(ctrl); ata_inb(ctrl); ata_inb(ctrl); ata_inb(ctrl);
 
-    /* Bekleme — drive secimi sonrasi */
-    for (volatile uint32_t w = 0; w < 50000; w++);
+    /* Uzun bekleme — VirtualBox icin kritik */
+    for (volatile uint32_t w = 0; w < 100000; w++);
 
     /* Status kontrol */
-    uint8_t status = ata_inb(base + ATA_REG_STATUS);
+    status = ata_inb(base + ATA_REG_STATUS);
 
-    /* 0xFF = floating bus, kesin yok */
+    /* 0xFF = floating bus */
     if (status == 0xFF) {
         d->present = false;
         return;
     }
 
-    /* Drive sec dogrulama — sectigimiz drive'i geri oku */
-    uint8_t drv_back = ata_inb(base + ATA_REG_DRIVE);
-    if ((drv_back & 0x10) != (sel & 0x10)) {
-        /* Drive secimi tutmuyor — device yok */
-        /* Ama bazi controller'lar bunu desteklemiyor, devam et */
-    }
-
-    /* BSY kalkmasi icin bekle */
-    for (uint32_t t = 0; t < 200000; t++) {
+    /* BSY kalkmasi bekle */
+    for (uint32_t t = 0; t < 500000; t++) {
         status = ata_inb(base + ATA_REG_STATUS);
         if (!(status & ATA_SR_BSY)) break;
     }
@@ -166,19 +159,20 @@ static void ata_identify(uint8_t idx)
     /* IDENTIFY gonder */
     ata_outb(base + ATA_REG_COMMAND, ATA_CMD_IDENTIFY);
 
-    /* Kisa bekleme */
-    ata_io_wait(ctrl);
-    ata_io_wait(ctrl);
-    for (volatile uint32_t w = 0; w < 10000; w++);
+    /* IO wait */
+    ata_inb(ctrl); ata_inb(ctrl); ata_inb(ctrl); ata_inb(ctrl);
 
-    /* Status kontrol — 0 ise device yok */
+    /* Bekleme — bazi controller'lar yavas */
+    for (volatile uint32_t w = 0; w < 100000; w++);
+
+    /* Status kontrol */
     status = ata_inb(base + ATA_REG_STATUS);
     if (status == 0) {
         d->present = false;
         return;
     }
 
-    /* BSY kalkmasi bekle — uzun timeout */
+    /* BSY kalkmasi bekle */
     for (uint32_t t = 0; t < 1000000; t++) {
         status = ata_inb(base + ATA_REG_STATUS);
         if (!(status & ATA_SR_BSY)) break;
@@ -194,7 +188,6 @@ static void ata_identify(uint8_t idx)
     uint8_t lba_hi  = ata_inb(base + ATA_REG_LBA_HI);
 
     if (lba_mid == 0x14 && lba_hi == 0xEB) {
-        /* ATAPI */
         d->present = true;
         d->is_ata = false;
         d->sectors = 0;
@@ -208,7 +201,6 @@ static void ata_identify(uint8_t idx)
     }
 
     if (lba_mid == 0x69 && lba_hi == 0x96) {
-        /* SATA ATAPI */
         d->present = true;
         d->is_ata = false;
         d->sectors = 0;
@@ -222,10 +214,8 @@ static void ata_identify(uint8_t idx)
     }
 
     if (lba_mid == 0x3C && lba_hi == 0xC3) {
-        /* SATA device — IDENTIFY ile devam */
-        /* Asagiya dus */
+        /* SATA — devam */
     } else if (lba_mid != 0 || lba_hi != 0) {
-        /* Bilinmeyen */
         d->present = true;
         d->is_ata = false;
         d->sectors = 0;
@@ -238,7 +228,6 @@ static void ata_identify(uint8_t idx)
     /* ERR kontrol */
     status = ata_inb(base + ATA_REG_STATUS);
     if (status & ATA_SR_ERR) {
-        /* ERR ama belki ATAPI — yine de device var */
         d->present = true;
         d->is_ata = false;
         d->sectors = 0;
@@ -248,8 +237,8 @@ static void ata_identify(uint8_t idx)
         return;
     }
 
-    /* DRQ bekle */
-    for (uint32_t t = 0; t < 500000; t++) {
+    /* DRQ bekle — uzun timeout */
+    for (uint32_t t = 0; t < 1000000; t++) {
         status = ata_inb(base + ATA_REG_STATUS);
         if (status & ATA_SR_ERR) {
             d->present = false;
@@ -271,7 +260,7 @@ static void ata_identify(uint8_t idx)
     d->present = true;
     d->is_ata = true;
 
-    /* Model (word 27-46, byte-swapped) */
+    /* Model (word 27-46) */
     for (int i = 0; i < 20; i++) {
         d->model[i * 2]     = (char)(ident[27 + i] >> 8);
         d->model[i * 2 + 1] = (char)(ident[27 + i] & 0xFF);
@@ -297,12 +286,10 @@ static void ata_identify(uint8_t idx)
             break;
     }
 
-    /* Sectors — LBA28 (word 60-61) */
+    /* Sectors */
     d->sectors = (uint32_t)ident[60] | ((uint32_t)ident[61] << 16);
-    if (d->sectors == 0) {
-        /* LBA48 (word 100-103) */
+    if (d->sectors == 0)
         d->sectors = (uint32_t)ident[100] | ((uint32_t)ident[101] << 16);
-    }
     d->size_mb = d->sectors / 2048;
 
     if (d->sectors < 16) {
