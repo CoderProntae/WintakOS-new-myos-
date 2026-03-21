@@ -143,17 +143,45 @@ void kernel_main(uint32_t magic, void* mbi_ptr)
     keyboard_init();
     __asm__ volatile("sti");
 
-    /* Interrupt'lar acildiktan sonra disk init */
-    /* Kisa bekleme — controller hazir olsun */
-    for (volatile uint32_t w = 0; w < 500000; w++);
+    /* Uzun bekleme — VirtualBox IDE hazir olsun */
+    for (volatile uint32_t w = 0; w < 1000000; w++);
+
+    /* Disk init */
     ata_init();
+
+    /* Ag */
+    net_init();
 
     sound_startup();
 
-    desktop_init();
-    setup_run();
-    desktop_apply_config();
+    /* Diskten config yukle */
+    disk_config_t disk_cfg;
+    memset(&disk_cfg, 0, sizeof(disk_cfg));
+    bool has_disk_cfg = disk_config_load(&disk_cfg);
 
+    if (has_disk_cfg) {
+        setup_config_t* scfg = setup_get_config();
+        if (disk_cfg.theme <= 4) {
+            scfg->theme = disk_cfg.theme;
+        }
+        if (disk_cfg.username[0] != '\0') {
+            uint32_t i = 0;
+            while (i < 31 && disk_cfg.username[i]) {
+                scfg->username[i] = disk_cfg.username[i];
+                i++;
+            }
+            scfg->username[i] = '\0';
+            scfg->completed = true;
+        }
+    }
+
+    desktop_init();
+
+    setup_config_t* scfg = setup_get_config();
+    if (!scfg->completed) {
+        setup_run();
+    }
+    desktop_apply_config();
     main_terminal = terminal_create(150, 20);
     calculator_create(10, 60);
     main_notepad = notepad_create(490, 10);
