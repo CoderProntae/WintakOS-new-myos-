@@ -669,14 +669,57 @@ static void term_execute(terminal_t* term)
         if (ata_get_drive_count() == 0) {
             terminal_print_color(term, "Disk yok!", RGB(255, 100, 100));
         } else {
+            /* Ham sektor oku */
+            uint8_t raw[512];
+            memset(raw, 0, 512);
+            bool rok = ata_read_sectors(0, CONFIG_LBA, 1, raw);
+
+            char buf[48];
+            uint32_t p;
+
+            if (!rok) {
+                terminal_print_color(term, "Sektor okuma basarisiz!",
+                                     RGB(255, 100, 100));
+            } else {
+                /* Ilk 16 byte hex dump */
+                p = 0;
+                const char* pf = "Raw: ";
+                while (*pf) buf[p++] = *pf++;
+                const char hex2[] = "0123456789ABCDEF";
+                for (int i = 0; i < 16 && p < 45; i++) {
+                    buf[p++] = hex2[raw[i] >> 4];
+                    buf[p++] = hex2[raw[i] & 0x0F];
+                    buf[p++] = ' ';
+                }
+                buf[p] = 0;
+                terminal_print(term, buf);
+
+                /* Magic kontrol */
+                uint32_t magic = *(uint32_t*)raw;
+                p = 0;
+                pf = "Magic: 0x";
+                while (*pf) buf[p++] = *pf++;
+                for (int i = 28; i >= 0; i -= 4)
+                    buf[p++] = hex2[(magic >> i) & 0xF];
+                if (magic == CONFIG_MAGIC) {
+                    pf = " OK";
+                } else {
+                    pf = " YANLIS";
+                }
+                while (*pf) buf[p++] = *pf++;
+                buf[p] = 0;
+                terminal_print(term, buf);
+            }
+
+            /* Config olarak oku */
             disk_config_t cfg;
             memset(&cfg, 0, sizeof(cfg));
             if (disk_config_load(&cfg)) {
-                terminal_print_color(term, "Config okundu!", RGB(100, 255, 100));
-                char buf[48];
-                uint32_t p = 0;
-                const char* pf = "  Res: ";
-                while (*pf) buf[p++] = *pf++;
+                terminal_print_color(term, "Config okundu!",
+                                     RGB(100, 255, 100));
+                p = 0;
+                const char* pf2 = "  Res: ";
+                while (*pf2) buf[p++] = *pf2++;
                 char nb[8];
                 uint_to_str(cfg.pref_res_w, nb, 8);
                 for (uint32_t j = 0; nb[j]; j++) buf[p++] = nb[j];
@@ -685,8 +728,24 @@ static void term_execute(terminal_t* term)
                 for (uint32_t j = 0; nb[j]; j++) buf[p++] = nb[j];
                 buf[p] = 0;
                 terminal_print(term, buf);
+
+                p = 0;
+                pf2 = "  User: ";
+                while (*pf2) buf[p++] = *pf2++;
+                for (uint32_t j = 0; cfg.username[j] && p < 40; j++)
+                    buf[p++] = cfg.username[j];
+                buf[p] = 0;
+                terminal_print(term, buf);
+
+                p = 0;
+                pf2 = "  Theme: ";
+                while (*pf2) buf[p++] = *pf2++;
+                buf[p++] = '0' + cfg.theme;
+                buf[p] = 0;
+                terminal_print(term, buf);
             } else {
-                terminal_print_color(term, "Config bulunamad\x01.", RGB(255, 100, 100));
+                terminal_print_color(term, "Config bulunamad\x01.",
+                                     RGB(255, 100, 100));
             }
         }
     }
